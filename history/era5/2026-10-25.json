@@ -1,0 +1,12 @@
+{
+ "bundle": "era5",
+ "cycle": "2026-10-23T12Z",
+ "merged": false,
+ "pr": "https://github.com/andrewnakas/powderbench/pull/4",
+ "submissions": 1,
+ "submitted_utc": "2026-10-23T21:50:26+00:00",
+ "tiers": {
+  "t1": 69
+ },
+ "updates": 0
+}
