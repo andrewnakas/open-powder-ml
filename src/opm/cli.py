@@ -179,7 +179,9 @@ def _better(new: dict, old: dict) -> bool:
     ps_n, ref = new.get("powder_score"), new.get("powder_score_raw_consensus")
     if ps_n is None or (ref is not None and ps_n < ref + 2):
         return False
-    if not old or old.get("holdout_season") != new.get("holdout_season"):
+    # comparable only on the very same held-out rows (same label AND size;
+    # a "-tail" holdout moves as the harvest grows)
+    if not old or (old.get("holdout_season"), old.get("n")) != (new.get("holdout_season"), new.get("n")):
         return True
     pin_ok = new.get("pinball", 0) <= old.get("pinball", float("inf")) * 1.02
     return ps_n >= old.get("powder_score", -1e9) - 0.5 and pin_ok
