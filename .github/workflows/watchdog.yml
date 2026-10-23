@@ -25,8 +25,10 @@ jobs:
           POWDERBENCH_TOKEN: ${{ secrets.POWDERBENCH_TOKEN }}
         run: |
           set +e
-          opm watchdog | tee watchdog.txt
-          echo "status=$?" >> "$GITHUB_OUTPUT"
+          opm watchdog > watchdog.txt
+          s=$?
+          cat watchdog.txt
+          echo "status=$s" >> "$GITHUB_OUTPUT"
       - name: Dispatch forecaster and raise an issue
         if: steps.check.outputs.status != '0'
         env:

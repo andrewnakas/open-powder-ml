@@ -50,7 +50,8 @@ jobs:
         if: steps.due.outputs.go == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download models -D work/models -p '*.pkl' --skip-existing || echo "no trained models yet: tier 0"
+        run: |
+          gh release download models -D work/models -p '*.pkl' --skip-existing || echo "no trained models yet, tier 0"
       - name: Forecast, validate, submit
         if: steps.due.outputs.go == 'true'
         env:
