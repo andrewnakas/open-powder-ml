@@ -1,0 +1,16 @@
+name: Set up open-powder-ml
+description: Python, a fresh PowderBench checkout (code + public data), and both packages.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+        cache-dependency-path: pyproject.toml
+    - name: PowderBench checkout (sparse, latest main)
+      shell: bash
+      run: scripts/checkout_powderbench.sh work/powderbench
+    - name: Install
+      shell: bash
+      run: pip install -q -e '.[dev]' ./work/powderbench

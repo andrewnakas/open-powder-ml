@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["history/**", "docs/scoreboard.md"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: ruff check src tests
+      - run: pytest -q

@@ -1,0 +1,79 @@
+# The daily submitter. Cron here starts 30 min to 5 h late, so it fires twice
+# an hour and every run is idempotent: `opm run` only acts on rounds that are
+# due (just opened, a newer 00Z/12Z NWP cycle is in, or a submission never
+# merged) and never within 45 min of a cutoff.
+name: Forecast & submit
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      league:
+        description: "Only this league (blank = every open round)"
+        default: ""
+      force:
+        description: "Resubmit even if nothing new (still deadline-guarded)"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and validate only"
+        type: boolean
+        default: false
+
+concurrency:
+  group: forecast
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Due?
+        id: due
+        env:
+          POWDERBENCH_TOKEN: ${{ secrets.POWDERBENCH_TOKEN }}
+        run: |
+          opm due ${{ inputs.league && format('-l {0}', inputs.league) || '' }} | tee due.txt
+          if grep -q "nothing due" due.txt && [ "${{ inputs.force }}" != "true" ]; then
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Champion models
+        if: steps.due.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download models -D work/models -p '*.pkl' --skip-existing || echo "no trained models yet: tier 0"
+      - name: Forecast, validate, submit
+        if: steps.due.outputs.go == 'true'
+        env:
+          POWDERBENCH_TOKEN: ${{ secrets.POWDERBENCH_TOKEN }}
+        run: >
+          opm run
+          ${{ inputs.league && format('-l {0}', inputs.league) || '' }}
+          ${{ inputs.force && '--force' || '' }}
+          ${{ inputs.dry_run && '--dry-run' || '' }}
+      - name: Commit forecast history
+        if: always() && steps.due.outputs.go == 'true' && !inputs.dry_run
+        run: |
+          git config user.name "open-powder-ml bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add history
+          git diff --cached --quiet && exit 0
+          git commit -qm "history: $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4 5; do git pull -q --rebase && git push -q && exit 0; sleep $((i * 5)); done
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.due.outputs.go == 'true'
+        with:
+          name: forecasts-${{ github.run_id }}
+          path: out/
+          if-no-files-found: ignore
+          retention-days: 30

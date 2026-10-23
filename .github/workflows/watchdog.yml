@@ -1,0 +1,49 @@
+# Safety net: an open round within 4 h of its cutoff without our file merged
+# on PowderBench main -> dispatch the forecaster now and open an issue.
+name: Watchdog
+
+on:
+  schedule:
+    - cron: "52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  issues: write
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Check open rounds
+        id: check
+        env:
+          POWDERBENCH_TOKEN: ${{ secrets.POWDERBENCH_TOKEN }}
+        run: |
+          set +e
+          opm watchdog | tee watchdog.txt
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - name: Dispatch forecaster and raise an issue
+        if: steps.check.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run forecast.yml
+          title="Watchdog: round(s) near cutoff without a merged submission"
+          n=$(gh issue list --state open --search "$title in:title" --json number -q '.[0].number')
+          body="$(cat watchdog.txt)
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
+      - name: Close the issue when healthy
+        if: steps.check.outputs.status == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --state open --search "Watchdog in:title" --json number -q '.[].number'); do
+            gh issue close "$n" --comment "All open rounds near cutoff have our file again."
+          done

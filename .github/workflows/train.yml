@@ -1,0 +1,29 @@
+# Retrain daily on everything harvested so far (and the newest resolved
+# rounds, which are the resort leagues' only truth); promote only through the backtest
+# gate (see `opm train` / cli._better). Champions are assets of the `models`
+# release, which the forecaster downloads every run.
+name: Train
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        bundle: [nh, era5, resorts, resorts-na]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Train ${{ matrix.bundle }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: opm train --bundle ${{ matrix.bundle }}

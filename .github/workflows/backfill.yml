@@ -1,0 +1,28 @@
+# Harvest the next chunk of lead-matched archive forecasts for training, just
+# after Open-Meteo's daily quota resets (00 UTC). Resumable: finished units
+# are assets of the `store` release.
+name: Backfill training data
+
+on:
+  schedule:
+    - cron: "20 0 * * *"
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: "Open-Meteo weighted-call budget"
+        default: "8000"
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Backfill
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: opm backfill --budget ${{ inputs.budget || '8000' }}
