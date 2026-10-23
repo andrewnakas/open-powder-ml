@@ -56,7 +56,9 @@ def _daily(r: Round, st: pd.DataFrame, models: tuple[str, ...] | None, ledger) -
     if models is None:
         h = om.fetch_by_region(st, a, b, live=True, ledger=ledger)
     else:
-        h = om.fetch_hourly(st, a, b, models, ledger=ledger, batch=50)
+        # network rows: keep whatever arrives in the time box; the rest is
+        # fetched by the next run and carried over from history
+        h = om.fetch_hourly(st, a, b, models, ledger=ledger, batch=50, partial_ok=True)
     print(f"  {r.key}: fetched {st.shape[0]} stations ({'all models' if models is None else models})", flush=True)
     return daily(h)
 
@@ -128,6 +130,7 @@ def build(r: Round, network: bool = True, budget: float | None = None) -> Result
         ledger.deadline = time.time() + NETWORK_MINUTES * 60
         try:
             parts.append(_model(_daily(r, reg.loc[todo], NETWORK_MODELS, ledger), r, proxy, bundle))
+            info["quota_note"] = ledger.note
         except om.QuotaExhausted as e:  # featured rows are what matter: ship without the rest
             info["quota_note"] = f"network rows skipped: {e}"
     parts = [p for p in parts if len(p)]

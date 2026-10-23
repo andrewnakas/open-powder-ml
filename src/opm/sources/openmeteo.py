@@ -72,6 +72,7 @@ class Ledger:
         self.path = path or WORK / "openmeteo-ledger.json"
         self.budget = budget
         self.deadline = deadline  # time.time() after which requests stop (QuotaExhausted)
+        self.note: str | None = None
         self.data = json.loads(self.path.read_text()) if self.path.exists() else {}
 
     def today(self) -> str:
@@ -166,6 +167,7 @@ def fetch_hourly(
     sleep: float = 1.0,
     variables: tuple[str, ...] = VARS,
     batch: int = BATCH,
+    partial_ok: bool = False,
 ) -> pd.DataFrame:
     """Hourly precip (mm), 2 m temperature (C) and snowfall (cm) per station,
     model and lead. st: index station_id, columns latitude/longitude/elevation_ft.
@@ -190,7 +192,14 @@ def fetch_hourly(
         # each model counts like a separate location (observed: the daily
         # limit hits ~2x sooner than a per-location count predicts)
         w = call_weight(len(b) * len(models), len(hourly), n_days)
-        res = _get(url, params, cache, ledger, w)
+        try:
+            res = _get(url, params, cache, ledger, w)
+        except QuotaExhausted as e:
+            if not out or not partial_ok:
+                raise
+            if ledger is not None:
+                ledger.note = f"partial: {i}/{len(st)} stations ({e})"
+            break
         for sid, r in zip(b.index, res):
             out.append(_frame(r, sid, models, leads, variables))
         if sleep:
