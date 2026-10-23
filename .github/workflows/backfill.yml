@@ -15,6 +15,9 @@ on:
 permissions:
   contents: write
 
+env:
+  PYTHONUNBUFFERED: "1"
+
 jobs:
   backfill:
     runs-on: ubuntu-latest

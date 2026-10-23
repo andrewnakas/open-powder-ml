@@ -68,9 +68,10 @@ class Ledger:
     """Estimated weighted-call usage per UTC day (Open-Meteo counts a call
     per location, more for >10 variables or >14 days)."""
 
-    def __init__(self, path: Path | None = None, budget: float | None = None):
+    def __init__(self, path: Path | None = None, budget: float | None = None, deadline: float | None = None):
         self.path = path or WORK / "openmeteo-ledger.json"
         self.budget = budget
+        self.deadline = deadline  # time.time() after which requests stop (QuotaExhausted)
         self.data = json.loads(self.path.read_text()) if self.path.exists() else {}
 
     def today(self) -> str:
@@ -97,6 +98,11 @@ def _get(url: str, params: dict, cache: Path | None, ledger: Ledger | None, weig
     cp = cache / f"{key}.json" if cache else None
     if cp and cp.exists():
         return json.loads(cp.read_text())
+    def out_of_time() -> bool:
+        return bool(ledger and ledger.deadline and time.time() > ledger.deadline)
+
+    if out_of_time():
+        raise QuotaExhausted("time budget for this run used up")
     if ledger:
         ledger.charge(weight)
     for attempt in range(6):
@@ -109,7 +115,10 @@ def _get(url: str, params: dict, cache: Path | None, ledger: Ledger | None, weig
             reason = r.text.lower()
             if "daily" in reason or "hourly" in reason:
                 raise QuotaExhausted(r.text[:200])
-            time.sleep(65)  # minutely limit
+            if out_of_time():
+                raise QuotaExhausted("rate-limited and out of time")
+            print(f"  open-meteo minutely limit, waiting ({attempt + 1}/6)", flush=True)
+            time.sleep(61)  # minutely limit
             continue
         if r.status_code >= 500:
             time.sleep(15 * (attempt + 1))
@@ -156,6 +165,7 @@ def fetch_hourly(
     ledger: Ledger | None = None,
     sleep: float = 1.0,
     variables: tuple[str, ...] = VARS,
+    batch: int = BATCH,
 ) -> pd.DataFrame:
     """Hourly precip (mm), 2 m temperature (C) and snowfall (cm) per station,
     model and lead. st: index station_id, columns latitude/longitude/elevation_ft.
@@ -165,8 +175,8 @@ def fetch_hourly(
     hourly = [f"{v}_previous_day{k}" if k else v for v in variables for k in leads]
     n_days = (end - start).days + 1
     out = []
-    for i in range(0, len(st), BATCH):
-        b = st.iloc[i : i + BATCH]
+    for i in range(0, len(st), batch):
+        b = st.iloc[i : i + batch]
         params = {
             "latitude": ",".join(f"{x:.4f}" for x in b.latitude),
             "longitude": ",".join(f"{x:.4f}" for x in b.longitude),

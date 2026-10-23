@@ -56,7 +56,8 @@ def _daily(r: Round, st: pd.DataFrame, models: tuple[str, ...] | None, ledger) -
     if models is None:
         h = om.fetch_by_region(st, a, b, live=True, ledger=ledger)
     else:
-        h = om.fetch_hourly(st, a, b, models, ledger=ledger)
+        h = om.fetch_hourly(st, a, b, models, ledger=ledger, batch=50)
+    print(f"  {r.key}: fetched {st.shape[0]} stations ({'all models' if models is None else models})", flush=True)
     return daily(h)
 
 
@@ -102,8 +103,14 @@ def _carry_over(league: str, d, ids: set[str]) -> pd.DataFrame:
     return prev[prev["station_id"].isin(ids)]
 
 
+FEATURED_MINUTES = 15  # time box for the featured fetch (they decide the ranking)
+NETWORK_MINUTES = 10  # time box for the rest of the network
+
+
 def build(r: Round, network: bool = True, budget: float | None = None) -> Result:
-    ledger = om.Ledger(budget=budget)
+    import time
+
+    ledger = om.Ledger(budget=budget, deadline=time.time() + FEATURED_MINUTES * 60)
     used0 = ledger.used
     reg = stations(r.league)
     ids = [s for s in r.stations if s in reg.index]
@@ -118,6 +125,7 @@ def build(r: Round, network: bool = True, budget: float | None = None) -> Result
     carried = _carry_over(r.league, r.round_date, set(net_ids)) if network else pd.DataFrame()
     todo = sorted(set(net_ids) - set(carried.get("station_id", [])))
     if network and todo:
+        ledger.deadline = time.time() + NETWORK_MINUTES * 60
         try:
             parts.append(_model(_daily(r, reg.loc[todo], NETWORK_MODELS, ledger), r, proxy, bundle))
         except om.QuotaExhausted as e:  # featured rows are what matter: ship without the rest
