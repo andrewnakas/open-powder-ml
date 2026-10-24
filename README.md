@@ -85,15 +85,15 @@ All of this is in `.github/workflows/`:
 
 | Workflow | When | What |
 |---|---|---|
-| `forecast.yml` | every 30 min | Submits each round as soon as it opens, then updates it when a newer 00Z/12Z cycle is in. It does nothing within 45 min of a cutoff. It is idempotent, and it resubmits anything that never merged. |
+| `forecast.yml` | always on | Runs as a keeper: one job loops for about 5.5 h, checks every 8 min what is due, then dispatches its successor. Cron only restarts the chain. It submits a round as soon as it opens, then updates it on newer 00Z/12Z cycles. It does nothing within 45 min of a cutoff and resubmits anything that never merged. It also starts the daily backfill and training. |
 | `watchdog.yml` | hourly | If a round near cutoff lacks our merged file, it dispatches the forecaster and opens an issue. |
 | `backfill.yml` | 00:20 UTC | Harvests archived forecasts within the Open-Meteo free-tier budget. It is resumable and stores to the `store` release. |
 | `train.yml` | 03:30 UTC | Retrains each bundle. A bundle is promoted to the `models` release only if it passes the backtest gate. |
 | `scoreboard.yml` | 21:40 UTC | Renders our standing from PowderBench's leaderboards into this README. |
 | `ci.yml` | push / PR | Runs lint and tests, including a contract test against PowderBench's own validator. |
 
-GitHub cron starts 30 min to 5 h late, which is why the forecaster fires often and decides
-what's due from state rather than the clock. That state is in `history/<league>/<round>.json`,
+GitHub cron starts 30 min to 5 h late and skips whole hours under load, which is why the
+forecaster is a self-chaining keeper and decides what's due from state rather than the clock. That state is in `history/<league>/<round>.json`,
 cross-checked against PowderBench main.
 
 ## Setup (to run your own copy)
