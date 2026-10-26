@@ -125,7 +125,11 @@ def _get(url: str, params: dict, cache: Path | None, ledger: Ledger | None, weig
             time.sleep(15 * (attempt + 1))
             continue
         r.raise_for_status()
-        out = r.json()
+        try:
+            out = r.json()
+        except ValueError:  # truncated body (seen on multi-MB archive responses): retry
+            time.sleep(10 * (attempt + 1))
+            continue
         out = out if isinstance(out, list) else [out]
         if cp:
             cp.parent.mkdir(parents=True, exist_ok=True)
