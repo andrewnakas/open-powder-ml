@@ -23,7 +23,7 @@ from .. import POWDER_IN, QCOLS, QUANTILES
 
 KEYS = ("station_id", "round_date", "horizon_h")
 REF = "cons_slr"  # the raw consensus every gain is measured against
-NON_FEATURES = {"station_id", "round_date", "truth_in", "league", "season", "aug"}
+NON_FEATURES = {"station_id", "round_date", "truth_in", "league", "season", "aug", "featured"}
 RATIO_K = 4.0  # inches of pseudo-count shrinking a station's ratio toward 1
 PARAMS = dict(learning_rate=0.03, num_leaves=31, min_child_samples=40, feature_fraction=0.8,
               bagging_fraction=0.8, bagging_freq=1, lambda_l2=1.0, verbose=-1)
@@ -115,6 +115,8 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
         tr, va = df[df["season"] != s], df[df["season"] == s]
         if "aug" in va:
             va = va[va["aug"] == 0]
+        if "featured" in va and va["featured"].any():  # score like the headline board
+            va = va[va["featured"] == 1]
         if tr.empty or va.empty:
             continue
         m, _ = _train(tr[feats], tr["truth_in"], {"objective": "quantile", "alpha": 0.5},
@@ -220,9 +222,13 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
     scale, metrics = {}, {}
     if "aug" in va:  # calibrate and score on the full-model rows only
         va = va[va["aug"] == 0]
+    va_all = va
+    if "featured" in va and va["featured"].any():
+        va = va[va["featured"] == 1]
     if va is not None and len(va):
+        raw_all = _predict_raw(models_va, clf_va, va_all[feats])
+        scale = _fit_scale(raw_all, va_all["truth_in"], va_all["horizon_h"])
         raw = _predict_raw(models_va, clf_va, va[feats])
-        scale = _fit_scale(raw, va["truth_in"], va["horizon_h"])
         pred = finish(raw, va["horizon_h"], scale)
         from ..backtest import score
 
@@ -233,6 +239,8 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
         metrics["cv_powder_score"] = cv["best"]["powder_score"]
         metrics["cv_raw_consensus"] = cv["best"]["raw_consensus"]
         metrics["cv"] = cv
+        champ = next((r for r in cv["all"] if r.get("label") == "champion"), None)
+        metrics["cv_champion_params"] = champ["powder_score"] if champ else None
     metrics["cons_slr_p99"] = {str(int(h)): float(g.quantile(0.99))
                                for h, g in df.groupby("horizon_h")["cons_slr"]}
 

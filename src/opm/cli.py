@@ -180,7 +180,8 @@ def _better(new: dict, old: dict) -> bool:
     With season CV (3+ seasons): the candidate was tuned against the
     champion's own settings on the same folds and retrained on more data, so
     it is promoted if its CV Powder Score beats the raw multi-model consensus
-    by 2+ points (and isn't worse than the champion's last CV by > 1 point).
+    by 2+ points and isn't worse than the champion's settings re-scored on the
+    same folds by > 0.5 point.
 
     Without CV: beat the raw consensus on the held-out season by 2+ points,
     and compare with the champion only on identical held-out rows."""
@@ -188,8 +189,10 @@ def _better(new: dict, old: dict) -> bool:
         ref = new.get("cv_raw_consensus")
         if ref is not None and new["cv_powder_score"] < ref + 2:
             return False
-        prev = (old or {}).get("cv_powder_score")
-        return prev is None or new["cv_powder_score"] >= prev - 1
+        # vs the champion: its own settings were re-scored on these same folds
+        # and rows (an old stored CV score was measured on different data)
+        champ = new.get("cv_champion_params")
+        return champ is None or new["cv_powder_score"] >= champ - 0.5
     ps_n, ref = new.get("powder_score"), new.get("powder_score_raw_consensus")
     if ps_n is None or (ref is not None and ps_n < ref + 2):
         return False

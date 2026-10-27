@@ -50,4 +50,5 @@ def training_table(league: str) -> pd.DataFrame:
         df = pd.concat([df, sub.sample(frac=0.5, random_state=0).assign(aug=1)], ignore_index=True)
     df["league"] = league
     df["season"] = season_of(df["round_date"], league)
+    df["featured"] = df["station_id"].map(stations(league)["featured"]).fillna(False).astype(int)
     return df
