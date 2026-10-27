@@ -1,12 +1,12 @@
 {
  "bundle": "resorts",
- "cycle": "2026-10-27T00Z",
- "merged": true,
- "pr": "https://github.com/andrewnakas/powderbench/pull/64",
- "submissions": 1,
- "submitted_utc": "2026-10-27T16:32:32+00:00",
+ "cycle": "2026-10-27T12Z",
+ "merged": false,
+ "pr": "https://github.com/andrewnakas/powderbench/pull/72",
+ "submissions": 2,
+ "submitted_utc": "2026-10-27T19:19:20+00:00",
  "tiers": {
   "t1": 39
  },
- "updates": 0
+ "updates": 1
 }
