@@ -31,6 +31,27 @@ def training_stations(league: str, network_sample: int = 0, seed: int = 7) -> pd
     return feat.sort_index()
 
 
+# Older winters from the historical-forecast archive (stitched short-lead
+# runs, 5-6 models): roughly doubles the deterministic training history.
+HIST_BEGIN, HIST_END = date(2022, 11, 1), date(2024, 4, 30)
+
+
+def hist_units(league: str, network_sample: int = 0) -> list[tuple]:
+    if league in ("era5", "resorts", "resorts-na"):
+        return []
+    st = training_stations(league, network_sample)
+    conus = st.apply(lambda r: om.in_conus(r.latitude, r.longitude), axis=1)
+    out = []
+    for a, b in om.season_chunks(HIST_BEGIN, HIST_END, (11, 12, 1, 2, 3, 4)):
+        for in_c, g in st.groupby(conus):
+            models = om.HIST_MODELS + (("ncep_hrrr_conus",) if in_c else ())
+            for i in range(0, len(g), om.BATCH):
+                part = g.iloc[i : i + om.BATCH]
+                name = store.unit_name(league, a, b, list(part.index)).replace("daily__", "hist__", 1)
+                out.append((name, a, b, part, models))
+    return out
+
+
 def units(league: str, begin: date, end: date, network_sample: int = 0) -> list[tuple]:
     st = training_stations(league, network_sample)
     months = (5, 6, 7, 8, 9, 10) if league in ("era5", "resorts") else (10, 11, 12, 1, 2, 3, 4, 5)
@@ -66,12 +87,20 @@ def run(leagues: list[str], budget: float, network_sample: int = 0, end: date | 
     done, new_files = 0, []
     todo = [u for lg in leagues for u in units(lg, ARCHIVE_BEGIN, end, network_sample) if u[0] not in have]
     todo.sort(key=_priority)
+    # then the older winters (lead-matched recent data first: it's what live looks like)
+    todo += [u for lg in leagues for u in hist_units(lg, network_sample) if u[0] not in have]
     print(f"backfill: {len(todo)} units to go, budget {budget:.0f} (used today {ledger.used:.0f})")
     try:
         for name, a, b, part, models in todo:
-            h = om.fetch_hourly(part, a, b, models, leads=(1, 2, 3), ledger=ledger,
-                                variables=om.ARCHIVE_VARS, cache=WORK / "cache" / "previous-runs")
-            d = features.daily(h)
+            if name.startswith("hist__"):
+                h = om.fetch_hourly(part, a, b, models, leads=(0,), ledger=ledger, url=om.HISTORICAL_URL,
+                                    variables=om.ARCHIVE_VARS, cache=WORK / "cache" / "historical")
+                d = features.daily(h)
+                d["lead"] = features.STITCHED
+            else:
+                h = om.fetch_hourly(part, a, b, models, leads=(1, 2, 3), ledger=ledger,
+                                    variables=om.ARCHIVE_VARS, cache=WORK / "cache" / "previous-runs")
+                d = features.daily(h)
             path = store.STORE / name
             path.parent.mkdir(parents=True, exist_ok=True)
             d.to_parquet(path, index=False)

@@ -94,13 +94,29 @@ def live_windows(dly: pd.DataFrame, round_date: date) -> pd.DataFrame:
     return _windows(d)
 
 
+STITCHED = 9  # `lead` code for the historical-forecast archive (short-lead runs stitched together)
+
+
 def archive_windows(dly: pd.DataFrame) -> pd.DataFrame:
-    """Previous-runs daily rows (lead k = issued k days before) -> every round
-    date: day i of round D uses lead i+1, like a forecast made at the cutoff."""
-    d = dly[dly["lead"] >= 1].copy()
-    d["i"] = d["lead"] - 1
-    d["round_date"] = (pd.to_datetime(d["date"]) - pd.to_timedelta(d["i"], unit="D")).dt.date
-    return _windows(d)
+    """Archive daily rows -> every round date.
+
+    Previous-runs rows (lead k = issued k days before): day i of round D uses
+    lead i+1, like a forecast made at the cutoff. Stitched historical rows
+    (older seasons; one series of short-lead runs) serve every day of every
+    round; their windows carry stitched=1 so the model can discount them
+    (live forecasts are always stitched=0)."""
+    parts = []
+    d = dly[(dly["lead"] >= 1) & (dly["lead"] < STITCHED)].copy()
+    if len(d):
+        d["i"] = d["lead"] - 1
+        d["round_date"] = (pd.to_datetime(d["date"]) - pd.to_timedelta(d["i"], unit="D")).dt.date
+        parts.append(_windows(d).assign(stitched=0))
+    st = dly[dly["lead"] == STITCHED]
+    if len(st):
+        rep = pd.concat([st.assign(i=i) for i in range(3)], ignore_index=True)
+        rep["round_date"] = (pd.to_datetime(rep["date"]) - pd.to_timedelta(rep["i"], unit="D")).dt.date
+        parts.append(_windows(rep).assign(stitched=1))
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
 def wide(win: pd.DataFrame) -> pd.DataFrame:
@@ -109,6 +125,7 @@ def wide(win: pd.DataFrame) -> pd.DataFrame:
     keys = ["station_id", "round_date", "horizon_h"]
     p = win.pivot_table(index=keys, columns="model", values=list(WIN_VARS), aggfunc="first")
     p.columns = [f"{v}__{m}" for v, m in p.columns]
+    p["stitched"] = win.groupby(keys)["stitched"].max() if "stitched" in win else 0
     slr_cols = [c for c in p.columns if c.startswith("slr__")]
     snow_cols = [c for c in p.columns if c.startswith("snow__")]
     prcp_cols = [c for c in p.columns if c.startswith("prcp__")]

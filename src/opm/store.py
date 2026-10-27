@@ -72,7 +72,7 @@ def push(tag: str, files: list[Path]) -> None:
 
 
 def load_daily(league: str) -> pd.DataFrame:
-    files = sorted((STORE).glob(f"daily__{league}__*.parquet"))
+    files = sorted(STORE.glob(f"daily__{league}__*.parquet")) + sorted(STORE.glob(f"hist__{league}__*.parquet"))
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)

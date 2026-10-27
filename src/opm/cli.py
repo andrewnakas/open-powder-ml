@@ -152,14 +152,18 @@ def train(
         _summary(f"train {bundle}: no training data yet")
         return
     df = pd.concat(tables, ignore_index=True)
-    b = gbm.fit(df)
+    path = store.MODELS / f"{bundle}.pkl"
+    old = gbm.Bundle.load(path) if path.exists() else None
+    b = gbm.fit(df, champion_params=getattr(old, "params", None) if old else None)
     _summary(f"train {bundle}: {len(df)} rows, seasons {sorted(df.season.unique())}, "
              f"{len(b.features)} features, rounds {b.rounds}")
-    _summary("held-out: " + json.dumps({k: v for k, v in b.metrics.items() if k != 'cons_slr_p99'}))
-    path = store.MODELS / f"{bundle}.pkl"
+    _summary("held-out: " + json.dumps({k: v for k, v in b.metrics.items() if k not in ("cons_slr_p99", "cv")}))
+    if b.metrics.get("cv"):
+        _summary("season CV (Powder Score; raw multi-model consensus as the baseline): " + "; ".join(
+            f"{r['label']} {r['powder_score']} vs raw {r['raw_consensus']} (folds {r['folds']})"
+            for r in b.metrics["cv"]["all"]))
     cand = store.MODELS / f"{bundle}.candidate.pkl"
     b.save(cand)
-    old = gbm.Bundle.load(path) if path.exists() else None
     better = _better(b.metrics, old.metrics if old else None)
     _summary(f"champion: {'none' if old is None else old.metrics.get('powder_score')} -> "
              f"candidate {b.metrics.get('powder_score')}: {'PROMOTE' if better else 'keep champion'}")
@@ -171,11 +175,21 @@ def train(
 
 
 def _better(new: dict, old: dict) -> bool:
-    """Promotion gate. The candidate must beat the raw multi-model consensus
-    on its held-out season by 2+ Powder Score points; against the champion it
-    is compared only on the same held-out season (scores on different
-    seasons aren't comparable), where it must not lose more than 0.5 points
-    or 2% pinball."""
+    """Promotion gate.
+
+    With season CV (3+ seasons): the candidate was tuned against the
+    champion's own settings on the same folds and retrained on more data, so
+    it is promoted if its CV Powder Score beats the raw multi-model consensus
+    by 2+ points (and isn't worse than the champion's last CV by > 1 point).
+
+    Without CV: beat the raw consensus on the held-out season by 2+ points,
+    and compare with the champion only on identical held-out rows."""
+    if new.get("cv_powder_score") is not None:
+        ref = new.get("cv_raw_consensus")
+        if ref is not None and new["cv_powder_score"] < ref + 2:
+            return False
+        prev = (old or {}).get("cv_powder_score")
+        return prev is None or new["cv_powder_score"] >= prev - 1
     ps_n, ref = new.get("powder_score"), new.get("powder_score_raw_consensus")
     if ps_n is None or (ref is not None and ps_n < ref + 2):
         return False

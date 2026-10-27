@@ -100,3 +100,17 @@ def test_due_initial_update_and_guard(monkeypatch, tmp_path):
     assert [a.reason for a in schedule.due(now, on_upstream=lambda r: False)] == ["resubmit"]
     # inside the guard window nothing happens
     assert schedule.due(datetime(2026, 1, 10, 23, 30, tzinfo=timezone.utc)) == []
+
+
+def test_stitched_history_serves_every_round_and_is_flagged():
+    h = _hourly(lead=0, precip=1.0, start="2023-01-08", days=8)
+    d = features.daily(h)
+    d["lead"] = features.STITCHED
+    w = features.archive_windows(d)
+    assert (w["stitched"] == 1).all()
+    r = w[w["round_date"] == date(2023, 1, 10)].set_index("horizon_h")
+    assert r.loc[72, "prcp"] == pytest.approx(3 * 24 / 25.4)
+    W = features.wide(w)
+    assert (W["stitched"] == 1).all()
+    live = features.wide(features.live_windows(features.daily(_hourly()), date(2026, 1, 10)))
+    assert (live["stitched"] == 0).all()

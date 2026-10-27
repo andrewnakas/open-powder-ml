@@ -28,6 +28,9 @@ from .. import WORK
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 PREVIOUS_URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
+HISTORICAL_URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+# the historical-forecast archive's models with data from the 2022-23 winter on
+HIST_MODELS = ("gfs_seamless", "icon_seamless", "gem_seamless", "ukmo_seamless", "jma_seamless")
 
 # Global models available live and (precip + temperature) in the previous-runs archive.
 GLOBAL_MODELS = (
@@ -172,12 +175,13 @@ def fetch_hourly(
     variables: tuple[str, ...] = VARS,
     batch: int = BATCH,
     partial_ok: bool = False,
+    url: str | None = None,
 ) -> pd.DataFrame:
     """Hourly precip (mm), 2 m temperature (C) and snowfall (cm) per station,
     model and lead. st: index station_id, columns latitude/longitude/elevation_ft.
     leads=(0,) -> the live forecast; leads=(1,2,3) -> the Previous Runs archive."""
     previous = any(leads)
-    url = PREVIOUS_URL if previous else FORECAST_URL
+    url = url or (PREVIOUS_URL if previous else FORECAST_URL)
     hourly = [f"{v}_previous_day{k}" if k else v for v in variables for k in leads]
     n_days = (end - start).days + 1
     out = []

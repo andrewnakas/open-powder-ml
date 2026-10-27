@@ -22,11 +22,23 @@ import pandas as pd
 from .. import POWDER_IN, QCOLS, QUANTILES
 
 KEYS = ("station_id", "round_date", "horizon_h")
+REF = "cons_slr"  # the raw consensus every gain is measured against
 NON_FEATURES = {"station_id", "round_date", "truth_in", "league", "season", "aug"}
 RATIO_K = 4.0  # inches of pseudo-count shrinking a station's ratio toward 1
 PARAMS = dict(learning_rate=0.03, num_leaves=31, min_child_samples=40, feature_fraction=0.8,
               bagging_fraction=0.8, bagging_freq=1, lambda_l2=1.0, verbose=-1)
 MAX_ROUNDS = 1500
+# Candidate settings tuned by season-wise cross-validation (the champion's own
+# settings always join the comparison, so a retrain can only move to
+# something that scores better on the same folds).
+GRID = [
+    PARAMS,
+    {**PARAMS, "num_leaves": 15, "min_child_samples": 100, "learning_rate": 0.05},
+    {**PARAMS, "num_leaves": 63, "min_child_samples": 60},
+    {**PARAMS, "num_leaves": 31, "min_child_samples": 200, "lambda_l2": 10.0, "learning_rate": 0.05},
+    {**PARAMS, "num_leaves": 127, "min_child_samples": 100, "feature_fraction": 0.6},
+]
+CV_FOLDS = 3  # the most recent seasons, each held out in turn
 
 
 @dataclass
@@ -38,6 +50,7 @@ class Bundle:
     stn_ratio: dict[str, float]
     rounds: dict[str, int]
     metrics: dict = field(default_factory=dict)
+    params: dict | None = None
     trained_through: str = ""
 
     def save(self, path: Path) -> None:
@@ -72,15 +85,65 @@ def feature_list(df: pd.DataFrame) -> list[str]:
     return [c for c in cols if df[c].notna().any()]
 
 
-def _train(X, y, obj: dict, Xv=None, yv=None, rounds: int | None = None):
+def _train(X, y, obj: dict, Xv=None, yv=None, rounds: int | None = None, params: dict | None = None):
+    params = params or PARAMS
     ds = lgb.Dataset(X, y, free_raw_data=False)
     if rounds is None and Xv is not None:
         dv = lgb.Dataset(Xv, yv, reference=ds)
-        b = lgb.train({**PARAMS, **obj}, ds, MAX_ROUNDS, valid_sets=[dv],
+        b = lgb.train({**params, **obj}, ds, MAX_ROUNDS, valid_sets=[dv],
                       callbacks=[lgb.early_stopping(100, verbose=False)])
         return b, b.best_iteration or MAX_ROUNDS
-    b = lgb.train({**PARAMS, **obj}, ds, rounds or 600)
+    b = lgb.train({**params, **obj}, ds, rounds or 600)
     return b, rounds or 600
+
+
+def _ps(pred: np.ndarray, d: pd.DataFrame) -> float | None:
+    from ..backtest import powder_score
+
+    m = d["climo_p50"].notna().to_numpy() if "climo_p50" in d else np.zeros(len(d), bool)
+    if not m.any():
+        return None
+    y = d["truth_in"].to_numpy()[m]
+    return powder_score(float(np.abs(pred[m] - y).mean()), float(np.abs(d["climo_p50"].to_numpy()[m] - y).mean()))
+
+
+def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list) -> dict:
+    """Season-wise CV of the median model (the MAE-optimal point forecast that
+    Powder Score judges): each fold season is held out, the rest train."""
+    scores, raw = [], []
+    for s in folds:
+        tr, va = df[df["season"] != s], df[df["season"] == s]
+        if "aug" in va:
+            va = va[va["aug"] == 0]
+        if tr.empty or va.empty:
+            continue
+        m, _ = _train(tr[feats], tr["truth_in"], {"objective": "quantile", "alpha": 0.5},
+                      va[feats], va["truth_in"], params=params)
+        scores.append(_ps(np.clip(m.predict(va[feats], num_iteration=m.best_iteration or None), 0, None), va))
+        raw.append(_ps(va[REF].to_numpy(), va.dropna(subset=[REF])) if REF in va else None)
+    ok = [x for x in scores if x is not None]
+    rk = [x for x in raw if x is not None]
+    return {"folds": [str(f) for f in folds], "per_fold": scores,
+            "powder_score": round(float(np.mean(ok)), 2) if ok else None,
+            "raw_consensus": round(float(np.mean(rk)), 2) if rk else None}
+
+
+def tune(df: pd.DataFrame, feats: list[str], champion: dict | None = None) -> tuple[dict, dict]:
+    """Pick the settings with the best mean CV Powder Score."""
+    seasons = sorted(df["season"].unique())
+    if len(seasons) < 3:
+        return PARAMS, {}
+    folds = seasons[-CV_FOLDS:]
+    cands = list(GRID) + ([champion] if champion and champion not in GRID else [])
+    results = []
+    for i, p in enumerate(cands):
+        r = cross_validate(df, feats, p, folds)
+        r["label"] = "champion" if champion is not None and p == champion else f"grid{i}"
+        print(f"  cv {r['label']}: {r['powder_score']} (raw {r['raw_consensus']}) per fold {r['per_fold']}",
+              flush=True)
+        results.append((r["powder_score"] if r["powder_score"] is not None else -1e9, p, r))
+    best = max(results, key=lambda x: x[0])
+    return best[1], {"best": best[2], "all": [r for _, _, r in results]}
 
 
 def _predict_raw(models, clf, X: pd.DataFrame) -> pd.DataFrame:
@@ -121,11 +184,13 @@ def finish(raw: pd.DataFrame, h: pd.Series, scale) -> pd.DataFrame:
     return out
 
 
-def fit(df: pd.DataFrame, holdout=None) -> Bundle:
-    """holdout: season used for early stopping, calibration and metrics; the
-    final models are refit on everything with the chosen round counts."""
+def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> Bundle:
+    """Settings are tuned by season-wise CV; then the last season is held out
+    for early stopping, quantile calibration and metrics, and the final models
+    are refit on everything with the chosen round counts."""
     df = add_oof_ratio(df)
     feats = feature_list(df)
+    params, cv = tune(df, feats, champion_params)
     seasons = sorted(df["season"].unique())
     if len(seasons) > 1 or holdout is not None:
         holdout = holdout if holdout is not None else seasons[-1]
@@ -139,13 +204,14 @@ def fit(df: pd.DataFrame, holdout=None) -> Bundle:
     rounds, models_va = {}, {}
     for a in QUANTILES:
         m, n = _train(tr[feats], tr["truth_in"], {"objective": "quantile", "alpha": a},
-                      va[feats] if va is not None else None, va["truth_in"] if va is not None else None)
+                      va[feats] if va is not None else None, va["truth_in"] if va is not None else None,
+                      params=params)
         rounds[str(a)], models_va[a] = n, m
     t24 = tr[tr["horizon_h"] == 24]
     v24 = va[va["horizon_h"] == 24] if va is not None else None
     clf_va, n = _train(t24[feats], (t24["truth_in"] >= POWDER_IN).astype(int), {"objective": "binary"},
                        v24[feats] if v24 is not None else None,
-                       (v24["truth_in"] >= POWDER_IN).astype(int) if v24 is not None else None)
+                       (v24["truth_in"] >= POWDER_IN).astype(int) if v24 is not None else None, params=params)
     rounds["clf"] = n
 
     scale, metrics = {}, {}
@@ -160,16 +226,20 @@ def fit(df: pd.DataFrame, holdout=None) -> Bundle:
         metrics = score(va.assign(**{c: pred[c] for c in pred.columns}))
         metrics["holdout_season"] = str(holdout)
         metrics["n_train"] = int(len(tr))
+    if cv:
+        metrics["cv_powder_score"] = cv["best"]["powder_score"]
+        metrics["cv_raw_consensus"] = cv["best"]["raw_consensus"]
+        metrics["cv"] = cv
     metrics["cons_slr_p99"] = {str(int(h)): float(g.quantile(0.99))
                                for h, g in df.groupby("horizon_h")["cons_slr"]}
 
     final_q = {a: _train(df[feats], df["truth_in"], {"objective": "quantile", "alpha": a},
-                         rounds=max(50, int(rounds[str(a)] * 1.1)))[0] for a in QUANTILES}
+                         rounds=max(50, int(rounds[str(a)] * 1.1)), params=params)[0] for a in QUANTILES}
     d24 = df[df["horizon_h"] == 24]
     final_clf = _train(d24[feats], (d24["truth_in"] >= POWDER_IN).astype(int), {"objective": "binary"},
-                       rounds=max(50, int(rounds["clf"] * 1.1)))[0]
+                       rounds=max(50, int(rounds["clf"] * 1.1)), params=params)[0]
     return Bundle(features=feats, quantile_models=final_q, clf=final_clf, scale=scale,
-                  stn_ratio=station_ratio(df), rounds=rounds, metrics=metrics,
+                  stn_ratio=station_ratio(df), rounds=rounds, metrics=metrics, params=params,
                   trained_through=str(max(df["round_date"])))
 
 
