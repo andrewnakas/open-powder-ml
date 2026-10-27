@@ -145,13 +145,40 @@ def wide(win: pd.DataFrame) -> pd.DataFrame:
     return p.reset_index()
 
 
+TERRAIN_COLS = ("local_relief_m", "slope_deg", "tpi_500m", "tpi_2km", "tpi_10km",
+                "elev_delta_2km", "elev_delta_14km", "mean_elev_14km")
+
+
+def terrain() -> pd.DataFrame:
+    """Per-station terrain from the Copernicus GLO-30 DEM (scripts/terrain.py,
+    committed as data/terrain.parquet): exposure, slope, topographic position
+    and the station's height above the terrain a model grid cell averages."""
+    from pathlib import Path
+
+    p = Path(__file__).resolve().parents[2] / "data" / "terrain.parquet"
+    if not p.exists():
+        return pd.DataFrame()
+    t = pd.read_parquet(p).set_index("station_id")
+    a = np.radians(t["aspect_deg"])
+    t["aspect_sin"], t["aspect_cos"] = np.sin(a), np.cos(a)  # north = cos 1, east = sin 1
+    return t[[*TERRAIN_COLS, "aspect_sin", "aspect_cos"]]
+
+
+_TERRAIN = None
+
+
 def add_static(df: pd.DataFrame, st: pd.DataFrame, clim: pd.DataFrame, league: str) -> pd.DataFrame:
-    """Station metadata, season and PowderBench climatology for each row."""
+    """Station metadata, terrain, season and PowderBench climatology for each row."""
     from . import NH_LEAGUES
 
+    global _TERRAIN
+    if _TERRAIN is None:
+        _TERRAIN = terrain()
     df = df.copy()
     meta = st[["latitude", "longitude", "elevation_ft", "day_offset"]].rename(columns={"elevation_ft": "elev_ft"})
     df = df.join(meta, on="station_id")
+    if len(_TERRAIN):
+        df = df.join(_TERRAIN, on="station_id")
     doy = pd.to_datetime(df["round_date"]).dt.dayofyear
     df["doy"] = doy.clip(upper=365)
     df["doy_sin"], df["doy_cos"] = np.sin(2 * np.pi * doy / 365.25), np.cos(2 * np.pi * doy / 365.25)

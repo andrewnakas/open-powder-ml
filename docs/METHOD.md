@@ -66,3 +66,15 @@ A retrained bundle replaces the champion only if both hold:
 - No information from after a cutoff is used.
 - Submissions are never touched within 45 min of a cutoff or after it.
 - The team is labelled as an ML entry.
+
+## Terrain
+Every station gets static terrain features from the Copernicus GLO-30 DEM (30 m), computed by
+`scripts/terrain.py` and stored in `data/terrain.parquet`. The method follows mountainweather/mtnwx.
+- **Local terrain:** relief within 10 km, slope, aspect, and topographic position (TPI) at 500 m,
+  2 km and 10 km.
+- **Height above the model grid:** the station's height above the mean terrain of a ~3 km cell
+  (HRRR) and of a 0.25° cell (GEFS/ECMWF/GFS). Coarse models report 2 m temperature at their
+  smoothed orography, so this offset explains much of their warm, rainy bias on mountain stations.
+
+DEM © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS
+by the European Union and ESA.
