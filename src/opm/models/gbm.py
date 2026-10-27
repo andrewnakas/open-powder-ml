@@ -130,7 +130,10 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
 
 def tune(df: pd.DataFrame, feats: list[str], champion: dict | None = None) -> tuple[dict, dict]:
     """Pick the settings with the best mean CV Powder Score."""
-    seasons = sorted(df["season"].unique())
+    counts = df["season"].value_counts()
+    # folds: the most recent seasons with a real share of the data (a season
+    # that has barely started would make a noisy fold)
+    seasons = sorted(s for s, n in counts.items() if n >= 0.05 * len(df))
     if len(seasons) < 3:
         return PARAMS, {}
     folds = seasons[-CV_FOLDS:]
