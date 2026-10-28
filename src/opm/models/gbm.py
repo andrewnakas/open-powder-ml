@@ -109,7 +109,7 @@ def _ps(pred: np.ndarray, d: pd.DataFrame) -> float | None:
 
 def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list) -> dict:
     """Season-wise CV of the median model (the MAE-optimal point forecast that
-    Powder Score judges): each fold season is held out, the rest train."""
+    Powder Accuracy judges): each fold season is held out, the rest train."""
     scores, raw = [], []
     for s in folds:
         tr, va = df[df["season"] != s], df[df["season"] == s]
@@ -131,7 +131,7 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
 
 
 def tune(df: pd.DataFrame, feats: list[str], champion: dict | None = None) -> tuple[dict, dict]:
-    """Pick the settings with the best mean CV Powder Score."""
+    """Pick the settings with the best mean CV Powder Accuracy."""
     counts = df["season"].value_counts()
     # folds: the most recent seasons with a real share of the data (a season
     # that has barely started would make a noisy fold)

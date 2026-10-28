@@ -10,7 +10,7 @@ D..D+2 (24/48/72 h), plus p10–p90 and P(≥ 6″ in 24 h). Each league defines
 - **era5:** ERA5 snowfall.
 - **Resort leagues:** the resorts' own reports, which run well above both ERA5 and raw models.
 
-The point forecast is p50, because the median minimises MAE, which is what Powder Score uses.
+The point forecast is p50, because the median minimises MAE, which is what Powder Accuracy uses.
 
 ## Features
 These are computed per model *m*, per station and per horizon window:

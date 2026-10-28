@@ -24,10 +24,10 @@ def render() -> str:
             continue
         ours = next((r for r in rows if r["team"] == TEAM), None)
         head = f"### {lb['league']} — " + (
-            f"**#{ours.get('rank', '?')}** of {len(rows)} (Powder Score {_fmt(ours.get('powder_score'))}, "
+            f"**#{ours.get('rank', '?')}** of {len(rows)} (Powder Accuracy {_fmt(ours.get('powder_score'))}, "
             f"{ours['rounds']} rounds{'' if ours.get('eligible') else ', not yet ranked'})"
             if ours else "not entered yet")
-        lines += [head, "", "| # | team | Powder Score | MAE | pinball | Brier₆ | rounds |",
+        lines += [head, "", "| # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |",
                   "|---|---|---|---|---|---|---|"]
         top = rows[:SHOW] + ([ours] if ours and ours not in rows[:SHOW] else [])
         for r in top:

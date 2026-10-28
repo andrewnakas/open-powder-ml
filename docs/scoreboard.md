@@ -2,7 +2,7 @@ _Updated 2026-10-27 00:58 UTC from PowderBench leaderboards._
 
 ### era5 — not entered yet
 
-| # | team | Powder Score | MAE | pinball | Brier₆ | rounds |
+| # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
 | 1 | baseline-climatology | 0.0 | 0.99 | 0.388 | 0.031 | 105 |
 | 2 | baseline-zeros | -1.2 | 1.03 | 0.515 | 0.033 | 105 |
@@ -13,7 +13,7 @@ _Updated 2026-10-27 00:58 UTC from PowderBench leaderboards._
 
 ### resorts — not entered yet
 
-| # | team | Powder Score | MAE | pinball | Brier₆ | rounds |
+| # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
 | 1 | baseline-openmeteo | 1.2 | 4.01 | – | – | 103 |
 | 2 | baseline-zeros | 0.2 | 4.70 | 2.350 | 0.137 | 103 |
@@ -24,7 +24,7 @@ _Updated 2026-10-27 00:58 UTC from PowderBench leaderboards._
 
 ### stations — not entered yet
 
-| # | team | Powder Score | MAE | pinball | Brier₆ | rounds |
+| # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
 | 1 | baseline-openmeteo | 26.5 | 1.97 | – | – | 7 |
 | 2 | baseline-gfs | 20.2 | 1.62 | – | – | 9 |

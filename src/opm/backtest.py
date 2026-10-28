@@ -1,5 +1,5 @@
 """PowderBench-style scoring for backtests (mirrors powderbench.scoring):
-Powder Score = 100 * (1 - MAE / MAE_climatology) on rows where climatology
+Powder Accuracy = 100 * (1 - MAE / MAE_climatology) on rows where climatology
 exists; pinball over the five quantiles; Brier on 24 h P(>= 6")."""
 
 from __future__ import annotations
