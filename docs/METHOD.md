@@ -78,3 +78,17 @@ Every station gets static terrain features from the Copernicus GLO-30 DEM (30 m)
 
 DEM © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS
 by the European Union and ESA.
+
+## Snowpack state before the cutoff (stations league)
+SNOTEL truth is the change in snow depth, so how much of a new fall shows up depends on the
+pack underneath. The model gets NRCS AWDB's daily readings dated ≤ D−2 (the newest end-of-day
+reading taken before a 00Z D cutoff):
+- snow depth and SWE, and the pack density (SWE ÷ depth)
+- new snow over the last 1 and 3 days
+- the 3-day depth change
+- average air temperature
+- whether the ground is bare
+
+## Late final pass
+Besides the initial submission and updates on new 00Z/12Z cycles, one final pass runs 3 to
+1.25 h before each cutoff. That's when the day's last usable runs have been published.

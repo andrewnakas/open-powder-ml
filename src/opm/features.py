@@ -197,4 +197,6 @@ def add_static(df: pd.DataFrame, st: pd.DataFrame, clim: pd.DataFrame, league: s
     for col in ("climo_p50", "climo_mean", "climo_p6"):
         if col not in df.columns:
             df[col] = np.nan
-    return df.drop(columns="doy")
+    from . import snowpack  # pre-cutoff snowpack state (sensor leagues)
+
+    return snowpack.add(df.drop(columns="doy"), league)

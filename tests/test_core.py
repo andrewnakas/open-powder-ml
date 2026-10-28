@@ -96,6 +96,14 @@ def test_due_initial_update_and_guard(monkeypatch, tmp_path):
     schedule.save_state(r_open, {"submissions": 2, "cycle": "2026-01-10T12Z", "updates": 1,
                                  "submitted_utc": "2026-01-10T19:00:00+00:00"})
     assert schedule.due(now) == []
+    # 1.5-3 h before the cutoff: one final pass with the latest runs
+    late = datetime(2026, 1, 10, 22, 0, tzinfo=timezone.utc)
+    assert [a.reason for a in schedule.due(late)] == ["final"]
+    schedule.save_state(r_open, {"submissions": 3, "cycle": "2026-01-10T12Z", "updates": 1, "final": True,
+                                 "submitted_utc": "2026-01-10T22:00:00+00:00"})
+    assert schedule.due(late) == []
+    schedule.save_state(r_open, {"submissions": 2, "cycle": "2026-01-10T12Z", "updates": 1,
+                                 "submitted_utc": "2026-01-10T19:00:00+00:00"})
     # merged file missing upstream -> resubmit
     assert [a.reason for a in schedule.due(now, on_upstream=lambda r: False)] == ["resubmit"]
     # inside the guard window nothing happens

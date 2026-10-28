@@ -100,6 +100,7 @@ def run(
             st.update(
                 submissions=st.get("submissions", 0) + 1,
                 updates=st.get("updates", 0) + (a.reason == "update"),
+                final=st.get("final", False) or a.reason == "final",
                 cycle=cyc, submitted_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 pr=sub.pr_url, bundle=res.info["bundle"], tiers=res.info["tiers"],
             )

@@ -5,6 +5,8 @@ Per open round:
   1. submit as soon as it opens: a guaranteed on-time file;
   2. update when a newer main NWP cycle (00Z / 12Z, all models in) becomes
      available, at most MAX_UPDATES times;
+  2b. one final pass 3 to 1.25 h before the cutoff (the 12Z/18Z runs that
+     land late in the day);
   3. never within submit.GUARD_MIN of the cutoff, never after.
 
 State lives in history/<league>/<round>.json (committed by the workflow) and
@@ -26,6 +28,7 @@ HISTORY = ROOT / "history"
 CYCLE_LAG_H = 7  # a 00Z/12Z cycle is complete on Open-Meteo ~6-7 h later
 MAX_UPDATES = 2
 UPDATE_MIN_LEFT_H = 1.25  # leave the bot and its validation time to merge
+FINAL_WINDOW_H = 3.0  # one last pass this close to the cutoff picks up the latest runs
 
 
 def latest_cycle(now: datetime) -> str:
@@ -75,4 +78,7 @@ def due(now: datetime | None = None, leagues: list[str] | None = None, force: bo
         elif force or (st.get("cycle", "") < cyc and st.get("updates", 0) < MAX_UPDATES
                        and left >= UPDATE_MIN_LEFT_H):
             out.append(Action(r, "update"))
+        elif (not st.get("final") and UPDATE_MIN_LEFT_H <= left <= FINAL_WINDOW_H
+              and now - datetime.fromisoformat(st["submitted_utc"]) >= timedelta(hours=1.5)):
+            out.append(Action(r, "final"))  # the freshest runs a cutoff-time forecast can use
     return out
