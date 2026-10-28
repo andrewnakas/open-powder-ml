@@ -44,4 +44,4 @@ def test_tier0_submission_validates(manifest, tmp_path):
     res = validate_submission(out, league=r.league, round_stations=list(r.stations))
     assert res.ok, res.summary()
     assert res.coverage == pytest.approx(1.0)
-    assert set(df.columns) == {"station_id", "horizon_h", "snowfall_in", *QCOLS, "prob_6in"}
+    assert set(df.columns) == {"station_id", "horizon_h", "snowfall_in", *QCOLS, "prob_6in", "swe_in"}

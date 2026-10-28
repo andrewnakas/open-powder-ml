@@ -24,7 +24,7 @@ from .sources import openmeteo as om
 from .store import MODELS
 
 HISTORY = ROOT / "history"
-COLS = ["station_id", "horizon_h", "snowfall_in", *QCOLS, "prob_6in"]
+COLS = ["station_id", "horizon_h", "snowfall_in", *QCOLS, "prob_6in", "swe_in"]
 
 
 def bundle_names(league: str) -> list[str]:
@@ -73,11 +73,11 @@ def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | Non
     t0 = fallback.predict(X)
     t0["tier"] = "t0"
     if bundle is None:
-        return t0
+        return _with_density(t0, X)
     trained = {f.split("__", 1)[1] for f in bundle.features if f.startswith("slr__")}
     Xg = feature_rows(dly[dly["model"].isin(trained)], r.league, live_round=r.round_date)
     if Xg.empty:
-        return t0
+        return _with_density(t0, X)
     Xg["league_code"] = NH_LEAGUES.index(as_league) if as_league in NH_LEAGUES else len(NH_LEAGUES)
     t1 = gbm.predict(bundle, Xg)
     t1["tier"] = "t1"
@@ -94,7 +94,17 @@ def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | Non
             base = t0i[c].reindex(pd.MultiIndex.from_frame(t1.loc[ext, ["station_id", "horizon_h"]])).to_numpy()
             t1.loc[ext, c] = np.fmax(t1.loc[ext, c].to_numpy(), 0.5 * (t1.loc[ext, c].to_numpy() + base))
         t1.loc[ext, "tier"] = "t1x"
-    return pd.concat([t1, t0]).drop_duplicates(["station_id", "horizon_h"], keep="first")
+    out = pd.concat([t1, t0]).drop_duplicates(["station_id", "horizon_h"], keep="first")
+    return _with_density(out, X)
+
+
+def _with_density(pred: pd.DataFrame, X: pd.DataFrame) -> pd.DataFrame:
+    """New-snow density (water / depth) from the models' own snow physics: the
+    consensus snow-water over the consensus snow depth (10% when dry)."""
+    d = (X["cons_swe"] / X["cons_slr"]).where(X["cons_slr"] > 0.05).clip(0.04, 0.25).fillna(0.10)
+    dens = pd.Series(d.to_numpy(), index=pd.MultiIndex.from_frame(X[["station_id", "horizon_h"]]))
+    idx = pd.MultiIndex.from_frame(pred[["station_id", "horizon_h"]])
+    return pred.assign(dens=dens.reindex(idx).fillna(0.10).to_numpy())
 
 
 def _carry_over(league: str, d, ids: set[str]) -> pd.DataFrame:
@@ -141,7 +151,8 @@ def build(r: Round, network: bool = True, budget: float | None = None) -> Result
         keep = carried[~carried["station_id"].isin(pred["station_id"])]
         pred = pd.concat([pred, keep], ignore_index=True)
     df = sanitize(pred)
-    raw = pred[["station_id", "horizon_h", "raw_in", "snowfall_in", *QCOLS, "prob_6in", "tier"]]
+    raw = pred[["station_id", "horizon_h", "raw_in", "snowfall_in", *QCOLS, "prob_6in", "tier"]
+               + (["dens"] if "dens" in pred else [])]
     fe = set(feat_ids)
     info.update(
         rows=len(df),
@@ -156,6 +167,7 @@ def sanitize(pred: pd.DataFrame) -> pd.DataFrame:
     """Exactly the PowderBench schema: numeric, clipped, monotone quantiles,
     p50 == snowfall_in, prob_6in only on 24 h rows, no duplicates."""
     df = pred[["station_id", "horizon_h", "snowfall_in", *QCOLS, "prob_6in"]].copy()
+    dens = pred["dens"] if "dens" in pred else pd.Series(0.10, index=pred.index)
     df = df[df["horizon_h"].isin(HORIZONS)].dropna(subset=["snowfall_in"])
     df = df.drop_duplicates(["station_id", "horizon_h"])
     q = df[list(QCOLS)].apply(pd.to_numeric, errors="coerce")
@@ -171,6 +183,9 @@ def sanitize(pred: pd.DataFrame) -> pd.DataFrame:
         df[c] = df.groupby("station_id")[c].cummax()
     p = pd.to_numeric(df["prob_6in"], errors="coerce").clip(0.001, 0.999).round(3)
     df["prob_6in"] = p.where(df["horizon_h"] == 24)
+    # water in the new snow (PowderBench's SWE / density tracks), cumulative too
+    df["swe_in"] = (df["snowfall_in"] * dens.reindex(df.index).fillna(0.10)).round(2)
+    df["swe_in"] = df.groupby("station_id")["swe_in"].cummax()
     return df.reset_index(drop=True)
 
 
