@@ -53,7 +53,7 @@ def remote_assets(tag: str) -> set[str]:
     return set(r.stdout.split()) if r.returncode == 0 else set()
 
 
-def pull(tag: str, dest: Path, pattern: str = "*", repo: str | None = None) -> None:
+def pull(tag: str, dest: Path, pattern: str = "*", repo: str | None = None, overwrite: bool = True) -> None:
     """Download a release's assets. One API call lists them; the files come
     from the public github.com/.../releases/download/ links, which don't
     count against the API rate limit (hundreds of per-asset API downloads per
@@ -75,7 +75,7 @@ def pull(tag: str, dest: Path, pattern: str = "*", repo: str | None = None) -> N
 
     def get(a):
         out = dest / a["name"]
-        if out.exists() and out.stat().st_size == a.get("size", -1):
+        if out.exists() and (not overwrite or out.stat().st_size == a.get("size", -1)):
             return
         url = f"https://github.com/{repo}/releases/download/{tag}/{a['name']}"
         for attempt in range(5):

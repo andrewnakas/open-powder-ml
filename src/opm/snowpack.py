@@ -28,6 +28,7 @@ AWDB_SUFFIXES = (":SNTL", ":SNTLT", ":MSNT")  # networks AWDB serves (not CDEC)
 
 
 TAG = "snowpack"  # release holding the daily observation archive (one file per water year)
+_PULLED = False
 
 
 def archive_dir():
@@ -42,9 +43,11 @@ def load_archive(station_ids, begin, end) -> pd.DataFrame:
     reads history from here and only the last days come live from AWDB."""
     from . import store
 
+    global _PULLED
     d = archive_dir()
-    if not any(d.glob("obs_*.parquet")):
-        store.pull(TAG, d, "obs_*.parquet")
+    if not _PULLED:  # fetch any water years not already here (keep fresher local files)
+        store.pull(TAG, d, "obs_*.parquet", overwrite=False)
+        _PULLED = True
     files = sorted(d.glob("obs_*.parquet"))
     if not files:
         return pd.DataFrame(columns=["station_id", "date", *ELEMENTS])

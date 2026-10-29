@@ -153,6 +153,10 @@ def train(
         _summary(f"train {bundle}: no training data yet")
         return
     df = pd.concat(tables, ignore_index=True)
+    if bundle == "nh":  # never silently train without the snowpack state again
+        st = df[df["league"] == "stations"]
+        cov = st["sp_depth"].notna().mean() if "sp_depth" in st and len(st) else 0.0
+        _summary(f"snowpack features on {cov:.0%} of stations-league rows")
     path = store.MODELS / f"{bundle}.pkl"
     old = gbm.Bundle.load(path) if path.exists() else None
     b = gbm.fit(df, champion_params=getattr(old, "params", None) if old else None)
