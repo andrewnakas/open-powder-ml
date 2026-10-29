@@ -64,11 +64,20 @@ def push(tag: str, files: list[Path]) -> None:
     repo = _repo()
     if not repo or not files:
         return
+    import time
+
     _ensure_release(tag)
     for i in range(0, len(files), 20):
-        r = _gh("release", "upload", tag, "-R", repo, "--clobber", *map(str, files[i : i + 20]))
-        if r.returncode != 0:
-            raise RuntimeError(f"release upload failed: {r.stderr[:300]}")
+        for attempt in range(12):  # GitHub's API rate limit: wait it out instead of losing the work
+            r = _gh("release", "upload", tag, "-R", repo, "--clobber", *map(str, files[i : i + 20]))
+            if r.returncode == 0:
+                break
+            if "rate limit" not in r.stderr.lower() and attempt >= 2:
+                raise RuntimeError(f"release upload failed: {r.stderr[:300]}")
+            print(f"  upload retry {attempt + 1}: {r.stderr.strip()[:120]}", flush=True)
+            time.sleep(min(300, 30 * (attempt + 1)))
+        else:
+            raise RuntimeError(f"release upload failed after retries: {r.stderr[:300]}")
 
 
 def load_daily(league: str) -> pd.DataFrame:

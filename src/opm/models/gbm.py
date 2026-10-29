@@ -122,7 +122,8 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
         m, _ = _train(tr[feats], tr["truth_in"], {"objective": "quantile", "alpha": 0.5},
                       va[feats], va["truth_in"], params=params)
         scores.append(_ps(np.clip(m.predict(va[feats], num_iteration=m.best_iteration or None), 0, None), va))
-        raw.append(_ps(va[REF].to_numpy(), va.dropna(subset=[REF])) if REF in va else None)
+        vr = va.dropna(subset=[REF]) if REF in va else va.iloc[:0]
+        raw.append(_ps(vr[REF].to_numpy(), vr) if len(vr) else None)
     ok = [x for x in scores if x is not None]
     rk = [x for x in raw if x is not None]
     return {"folds": [str(f) for f in folds], "per_fold": scores,

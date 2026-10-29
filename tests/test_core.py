@@ -122,3 +122,16 @@ def test_stitched_history_serves_every_round_and_is_flagged():
     assert (W["stitched"] == 1).all()
     live = features.wide(features.live_windows(features.daily(_hourly()), date(2026, 1, 10)))
     assert (live["stitched"] == 0).all()
+
+
+def test_plausibility_cap_kills_invented_storms():
+    from opm.predict import plausibility_cap
+
+    X = pd.DataFrame({"station_id": ["la-hoya", "storm"], "horizon_h": [24, 24],
+                      "slr__m1": [0.0, 10.0], "slr__m2": [0.0, 12.0]})
+    pred = pd.DataFrame({"station_id": ["la-hoya", "storm"], "horizon_h": [24, 24], "snowfall_in": [13.8, 14.0],
+                         **{q: [13.8, 14.0] for q in QCOLS}, "prob_6in": [0.7, 0.8]})
+    out = plausibility_cap(pred, X, ["slr__m1", "slr__m2"]).set_index("station_id")
+    assert out.loc["la-hoya", "snowfall_in"] == pytest.approx(0.5)  # every model dry: no storm
+    assert out.loc["la-hoya", "prob_6in"] <= 0.02
+    assert out.loc["storm", "snowfall_in"] == 14.0  # a real storm is untouched

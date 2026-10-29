@@ -95,7 +95,38 @@ def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | Non
             t1.loc[ext, c] = np.fmax(t1.loc[ext, c].to_numpy(), 0.5 * (t1.loc[ext, c].to_numpy() + base))
         t1.loc[ext, "tier"] = "t1x"
     out = pd.concat([t1, t0]).drop_duplicates(["station_id", "horizon_h"], keep="first")
+    out = plausibility_cap(out, X, [c for c in X.columns if c.startswith(("slr__", "snow__"))])
     return _with_density(out, X)
+
+
+CAP_MULT, CAP_ADD = 2.5, 0.5  # physical plausibility: never far above the snowiest model
+
+
+def plausibility_cap(pred: pd.DataFrame, X: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """A statistical model must not invent a storm no weather model sees (a
+    resorts model once forecast 10-14" at La Hoya with every model at 0).
+    Each row is capped at CAP_MULT x the snowiest input + CAP_ADD inches, and
+    P(>=6") is held near zero when even that cap is under 6"."""
+    use = [c for c in cols if c in X]
+    if not use or pred.empty:
+        return pred
+    top = X[use].max(axis=1, skipna=True)
+    keys = pd.MultiIndex.from_frame(X[["station_id", "horizon_h"]])
+    cap = pd.Series((CAP_MULT * top + CAP_ADD).to_numpy(), index=keys)
+    cap = cap[~cap.index.duplicated()]
+    c = cap.reindex(pd.MultiIndex.from_frame(pred[["station_id", "horizon_h"]])).to_numpy()
+    out = pred.copy()
+    ok = ~np.isnan(c)
+    for q in (*QCOLS, "snowfall_in"):
+        if q in out:
+            out.loc[ok, q] = np.minimum(out.loc[ok, q].to_numpy(), c[ok])
+    if "prob_6in" in out:
+        low = ok & (c < 6.0)
+        out.loc[low, "prob_6in"] = np.minimum(out.loc[low, "prob_6in"].fillna(0).to_numpy(), 0.02)
+    n = int((ok & (pred["snowfall_in"].to_numpy() > np.nan_to_num(c, nan=np.inf))).sum())
+    if n:
+        print(f"  plausibility cap trimmed {n} rows", flush=True)
+    return out
 
 
 def _with_density(pred: pd.DataFrame, X: pd.DataFrame) -> pd.DataFrame:
