@@ -27,6 +27,33 @@ COLS = ("sp_depth", "sp_swe", "sp_density", "sp_new1", "sp_new3", "sp_depth_chg3
 AWDB_SUFFIXES = (":SNTL", ":SNTLT", ":MSNT")  # networks AWDB serves (not CDEC)
 
 
+TAG = "snowpack"  # release holding the daily observation archive (one file per water year)
+
+
+def archive_dir():
+    from . import WORK
+
+    return WORK / "snowpack"
+
+
+def load_archive(station_ids, begin, end) -> pd.DataFrame:
+    """Archived daily readings (pulled from the `snowpack` release once per
+    process): NRCS AWDB throttles bursts from shared CI runners, so training
+    reads history from here and only the last days come live from AWDB."""
+    from . import store
+
+    d = archive_dir()
+    if not any(d.glob("obs_*.parquet")):
+        store.pull(TAG, d, "obs_*.parquet")
+    files = sorted(d.glob("obs_*.parquet"))
+    if not files:
+        return pd.DataFrame(columns=["station_id", "date", *ELEMENTS])
+    o = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    o["date"] = pd.to_datetime(o["date"]).dt.date
+    ids = set(station_ids)
+    return o[o["station_id"].isin(ids) & (o["date"] >= begin) & (o["date"] <= end)]
+
+
 def fetch(station_ids: list[str], begin, end) -> pd.DataFrame:
     from powderbench.snotel import fetch_daily
 
@@ -44,8 +71,18 @@ def features(keys: pd.DataFrame, obs: pd.DataFrame | None = None) -> pd.DataFram
         return pd.DataFrame(columns=["station_id", "round_date", *COLS])
     rd = pd.to_datetime(k["round_date"])
     if obs is None:
-        obs = fetch(sorted(k["station_id"].unique()), (rd.min() - timedelta(days=LAG_DAYS + 6)).date(),
-                    (rd.max() - timedelta(days=LAG_DAYS)).date())
+        ids = sorted(k["station_id"].unique())
+        begin = (rd.min() - timedelta(days=LAG_DAYS + 6)).date()
+        end = (rd.max() - timedelta(days=LAG_DAYS)).date()
+        obs = load_archive(ids, begin, end)
+        have_to = max(obs["date"]) if len(obs) else None
+        if have_to is None or have_to < end:  # the recent tail (live forecasts): straight from AWDB
+            gap_from = max(begin, (have_to + timedelta(days=1)) if have_to else begin)
+            if (end - gap_from).days <= 45:
+                try:
+                    obs = pd.concat([obs, fetch(ids, gap_from, end)], ignore_index=True)
+                except Exception as e:
+                    print(f"snowpack: live AWDB fetch failed ({e}); using the archive only", flush=True)
     if obs.empty:
         return k.assign(**{c: np.nan for c in COLS})
     o = obs.copy()
@@ -82,7 +119,7 @@ def add(df: pd.DataFrame, league: str) -> pd.DataFrame:
         return df
     try:
         f = features(df[["station_id", "round_date"]])
-    except Exception as e:  # AWDB down: forecast without them (NaN, as for CDEC stations)
+    except Exception as e:  # data unavailable: forecast without them (NaN, as for CDEC stations)
         print(f"snowpack features unavailable: {e}", flush=True)
         return df
     f["round_date"] = pd.to_datetime(f["round_date"]).dt.date

@@ -26,6 +26,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
+      - name: Refresh this water year's snowpack readings (AWDB may throttle CI: best effort)
+        if: matrix.bundle == 'nh'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/snowpack_archive.py $(python -c "import datetime as d; t=d.date.today(); print(t.year + (t.month >= 10))")
       - name: Train ${{ matrix.bundle }}
         env:
           GH_TOKEN: ${{ github.token }}
