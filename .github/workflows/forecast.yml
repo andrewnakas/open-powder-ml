@@ -59,7 +59,7 @@ jobs:
       - name: Single pass
         if: ${{ inputs.once }}
         run: |
-          gh release download models -D work/models -p '*.pkl' --clobber || echo "no trained models: tier 0"
+          python -c "from opm import store; store.pull('models', store.MODELS, '*.pkl')" || echo "no trained models: tier 0"
           opm run ${{ inputs.league && format('-l {0}', inputs.league) || '' }} \
             ${{ inputs.force && '--force' || '' }} ${{ inputs.dry_run && '--dry-run' || '' }}
       - name: Commit history (single pass)

@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -52,12 +53,43 @@ def remote_assets(tag: str) -> set[str]:
     return set(r.stdout.split()) if r.returncode == 0 else set()
 
 
-def pull(tag: str, dest: Path, pattern: str = "*") -> None:
-    repo = _repo()
+def pull(tag: str, dest: Path, pattern: str = "*", repo: str | None = None) -> None:
+    """Download a release's assets. One API call lists them; the files come
+    from the public github.com/.../releases/download/ links, which don't
+    count against the API rate limit (hundreds of per-asset API downloads per
+    training job exhausted it)."""
+    import fnmatch
+    import json
+    from concurrent.futures import ThreadPoolExecutor
+
+    import requests
+
+    repo = repo or _repo()
     if not repo:
         return
     dest.mkdir(parents=True, exist_ok=True)
-    _gh("release", "download", tag, "-R", repo, "-D", str(dest), "-p", pattern, "--skip-existing")
+    r = _gh("release", "view", tag, "-R", repo, "--json", "assets")
+    if r.returncode != 0:
+        return
+    assets = [a for a in json.loads(r.stdout)["assets"] if fnmatch.fnmatch(a["name"], pattern)]
+
+    def get(a):
+        out = dest / a["name"]
+        if out.exists() and out.stat().st_size == a.get("size", -1):
+            return
+        url = f"https://github.com/{repo}/releases/download/{tag}/{a['name']}"
+        for attempt in range(5):
+            try:
+                resp = requests.get(url, timeout=300)
+                resp.raise_for_status()
+                out.write_bytes(resp.content)
+                return
+            except requests.RequestException:
+                time.sleep(5 * (attempt + 1))
+        print(f"  could not download {a['name']}", flush=True)
+
+    with ThreadPoolExecutor(16) as ex:
+        list(ex.map(get, assets))
 
 
 def push(tag: str, files: list[Path]) -> None:

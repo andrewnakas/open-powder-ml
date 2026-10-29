@@ -30,7 +30,7 @@ while :; do
   echo "::group::pass $(date -u +%H:%MZ)"
   scripts/checkout_powderbench.sh work/powderbench >/dev/null
   if opm due | tee due.txt | grep -qv -e "nothing due" -e "^cycle"; then
-    gh release download models -D work/models -p '*.pkl' --clobber 2>/dev/null || echo "no trained models: tier 0"
+    python -c "from opm import store; store.pull('models', store.MODELS, '*.pkl')" 2>/dev/null || echo "no trained models: tier 0"
     opm run ${OPM_ARGS:-} || echo "::warning::opm run reported failures"
     commit_history
   fi
