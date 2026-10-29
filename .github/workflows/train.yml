@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - name: Refresh this water year's snowpack readings (AWDB may throttle CI: best effort)
+      - name: "Refresh this water year's snowpack readings (best effort, AWDB may throttle CI)"
         if: matrix.bundle == 'nh'
         continue-on-error: true
         env:
