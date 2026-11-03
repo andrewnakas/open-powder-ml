@@ -1,47 +1,48 @@
-_Updated 2026-11-02 01:06 UTC from PowderBench leaderboards._
+_Updated 2026-11-03 03:07 UTC from PowderBench leaderboards._
 
-### era5 — not entered yet
+### era5 — **#None** of 16 (Powder Accuracy 25.5, 1 rounds, not yet ranked)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
-| 1 | baseline-climatology | 0.0 | 0.97 | 0.382 | 0.030 | 107 |
-| 2 | baseline-zeros | -1.3 | 0.98 | 0.489 | 0.032 | 111 |
-| 3 | baseline-gfs | -24.8 | 0.78 | – | – | 111 |
-| 4 | baseline-openmeteo | -34.2 | 0.86 | – | – | 111 |
-| 5 | baseline-persistence | -202.9 | 1.45 | – | – | 111 |
+| 1 | baseline-climatology | 0.0 | 0.96 | 0.379 | 0.030 | 108 |
+| 2 | baseline-zeros | -1.3 | 0.97 | 0.485 | 0.031 | 112 |
+| 3 | baseline-gfs | -25.8 | 0.77 | – | – | 112 |
+| 4 | baseline-openmeteo | -34.0 | 0.85 | – | – | 112 |
+| 5 | baseline-persistence | -201.1 | 1.44 | – | – | 112 |
 | None | southern-league-mogger | 51.7 | 0.38 | 0.152 | 0.000 | 1 |
+| None | **open-powder-ml** | 25.5 | 0.05 | 0.017 | 0.000 | 1 |
 
-### observers — **#None** of 16 (Powder Accuracy 13.1, 3 rounds, not yet ranked)
-
-| # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
-|---|---|---|---|---|---|---|
-| 1 | baseline-ukmo | 18.3 | 0.17 | – | – | 6 |
-| 2 | baseline-icon | 16.4 | 0.17 | – | – | 6 |
-| 3 | baseline-consensus | 14.2 | 0.17 | – | – | 6 |
-| 4 | baseline-gem | 7.9 | 0.17 | – | – | 6 |
-| 5 | baseline-zeros | 1.5 | 0.21 | 0.108 | 0.000 | 6 |
-| 6 | baseline-gfs | -9.3 | 0.20 | – | – | 6 |
-| None | **open-powder-ml** | 13.1 | 0.19 | 0.075 | 0.000 | 3 |
-
-### resorts — **#15** of 17 (Powder Accuracy -4342.8, 5 rounds)
+### observers — **#None** of 17 (Powder Accuracy 18.3, 4 rounds, not yet ranked)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
-| 1 | baseline-icon | 14.1 | 0.19 | – | – | 8 |
-| 2 | baseline-zeros | 2.4 | 4.45 | 2.225 | 0.130 | 109 |
-| 3 | baseline-climatology | 0.0 | 4.55 | 2.064 | 0.129 | 105 |
-| 4 | baseline-gfs | -37.9 | 3.71 | – | – | 109 |
-| 5 | baseline-openmeteo | -42.4 | 3.82 | – | – | 109 |
-| 6 | baseline-persistence | -109.3 | 4.07 | – | – | 109 |
-| 15 | **open-powder-ml** | -4342.8 | 1.88 | 0.658 | 0.082 | 5 |
+| 1 | baseline-ukmo | 21.6 | 0.16 | – | – | 7 |
+| 2 | baseline-consensus | 17.6 | 0.17 | – | – | 7 |
+| 3 | baseline-icon | 16.1 | 0.17 | – | – | 7 |
+| 4 | baseline-gem | 11.1 | 0.17 | – | – | 7 |
+| 5 | baseline-zeros | 1.2 | 0.21 | 0.105 | 0.000 | 7 |
+| 6 | baseline-climatology | 0.0 | 0.18 | 0.104 | 0.000 | 5 |
+| None | **open-powder-ml** | 18.3 | 0.17 | 0.067 | 0.000 | 4 |
 
-### stations — **#1** of 16 (Powder Accuracy 30.1, 6 rounds)
+### resorts — **#15** of 17 (Powder Accuracy -4361.6, 6 rounds)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
-| 1 | **open-powder-ml** | 30.1 | 0.77 | 0.299 | 0.021 | 6 |
-| 2 | baseline-wpc | 26.5 | 0.77 | 0.303 | 0.019 | 6 |
-| 3 | baseline-consensus | 23.1 | 0.74 | – | – | 8 |
-| 4 | baseline-ukmo | 20.6 | 0.78 | – | – | 9 |
-| 5 | house-blend | 20.4 | 0.88 | 0.441 | 0.034 | 6 |
-| 6 | baseline-ecmwf | 15.5 | 0.84 | – | – | 5 |
+| 1 | baseline-icon | 18.5 | 0.17 | – | – | 9 |
+| 2 | baseline-zeros | 3.2 | 4.41 | 2.205 | 0.129 | 110 |
+| 3 | baseline-climatology | 0.0 | 4.51 | 2.045 | 0.127 | 106 |
+| 4 | baseline-openmeteo | -74.3 | 3.79 | – | – | 110 |
+| 5 | baseline-gfs | -78.8 | 3.68 | – | – | 110 |
+| 6 | baseline-persistence | -115.4 | 4.04 | – | – | 110 |
+| 15 | **open-powder-ml** | -4361.6 | 1.72 | 0.598 | 0.093 | 6 |
+
+### stations — **#2** of 16 (Powder Accuracy 24.6, 7 rounds)
+
+| # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
+|---|---|---|---|---|---|---|
+| 1 | baseline-wpc | 27.2 | 0.81 | 0.314 | 0.016 | 7 |
+| 2 | **open-powder-ml** | 24.6 | 0.94 | 0.356 | 0.020 | 7 |
+| 3 | baseline-consensus | 23.0 | 0.81 | – | – | 9 |
+| 4 | house-blend | 21.4 | 0.94 | 0.460 | 0.032 | 7 |
+| 5 | baseline-ukmo | 20.4 | 0.85 | – | – | 10 |
+| 6 | baseline-ecmwf | 15.4 | 0.96 | – | – | 6 |
