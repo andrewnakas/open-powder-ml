@@ -1,15 +1,16 @@
-_Updated 2026-11-09 01:18 UTC from PowderBench leaderboards._
+_Updated 2026-11-10 03:55 UTC from PowderBench leaderboards._
 
-### alps — **#None** of 15 (Powder Accuracy 27.7, 3 rounds, not yet ranked)
+### alps — **#None** of 15 (Powder Accuracy 11.6, 4 rounds, not yet ranked)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
 | None | baseline-ukmo | 31.2 | 0.08 | – | – | 2 |
 | None | baseline-consensus | 31.2 | 0.08 | – | – | 2 |
-| None | **open-powder-ml** | 27.7 | 0.11 | 0.042 | 0.000 | 3 |
 | None | baseline-gem | 27.2 | 0.09 | – | – | 2 |
 | None | baseline-openmeteo | 26.2 | 0.09 | – | – | 2 |
 | None | baseline-arome | 26.1 | 0.09 | – | – | 2 |
+| None | baseline-icon | 25.2 | 0.09 | – | – | 2 |
+| None | **open-powder-ml** | 11.6 | 0.15 | 0.057 | 0.000 | 4 |
 
 ### era5 — **#1** of 17 (Powder Accuracy 29.9, 7 rounds)
 
@@ -22,17 +23,17 @@ _Updated 2026-11-09 01:18 UTC from PowderBench leaderboards._
 | 5 | baseline-ecmwf | 0.6 | 0.13 | – | – | 9 |
 | 6 | baseline-climatology | 0.0 | 0.92 | 0.362 | 0.029 | 114 |
 
-### observers — **#14** of 17 (Powder Accuracy -69.7, 10 rounds)
+### observers — **#14** of 17 (Powder Accuracy -63.4, 11 rounds)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
-| 1 | open-powder-ensemble | 15.5 | 0.13 | 0.049 | 0.000 | 7 |
-| 2 | baseline-icon | 12.4 | 0.15 | – | – | 13 |
-| 3 | baseline-consensus | 11.3 | 0.15 | – | – | 13 |
-| 4 | baseline-ukmo | 5.9 | 0.15 | – | – | 13 |
-| 5 | baseline-zeros | 5.3 | 0.17 | 0.087 | 0.000 | 13 |
-| 6 | baseline-climatology | 0.0 | 0.16 | 0.102 | 0.000 | 11 |
-| 14 | **open-powder-ml** | -69.7 | 0.32 | 0.112 | 0.000 | 10 |
+| 1 | open-powder-ensemble | 16.8 | 0.13 | 0.050 | 0.000 | 8 |
+| 2 | baseline-icon | 12.2 | 0.16 | – | – | 14 |
+| 3 | baseline-consensus | 12.0 | 0.15 | – | – | 14 |
+| 4 | baseline-ukmo | 6.2 | 0.15 | – | – | 14 |
+| 5 | baseline-zeros | 5.6 | 0.18 | 0.088 | 0.000 | 14 |
+| 6 | baseline-climatology | 0.0 | 0.17 | 0.102 | 0.000 | 12 |
+| 14 | **open-powder-ml** | -63.4 | 0.31 | 0.111 | 0.000 | 11 |
 
 ### resorts — **#14** of 17 (Powder Accuracy -3847.7, 7 rounds)
 
@@ -46,26 +47,26 @@ _Updated 2026-11-09 01:18 UTC from PowderBench leaderboards._
 | 6 | baseline-persistence | -113.5 | 4.00 | – | – | 111 |
 | 14 | **open-powder-ml** | -3847.7 | 1.49 | 0.523 | 0.080 | 7 |
 
-### resorts-na — **#None** of 17 (Powder Accuracy -1.2, 4 rounds, not yet ranked)
+### resorts-na — **#11** of 17 (Powder Accuracy -1.5, 5 rounds)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
-| None | baseline-wpc | 9.0 | 1.23 | 0.545 | 0.061 | 4 |
-| None | baseline-gfs | 6.5 | 1.20 | – | – | 4 |
-| None | baseline-openmeteo | 6.5 | 1.20 | – | – | 4 |
-| None | baseline-ecmwf | 5.8 | 1.49 | – | – | 2 |
-| None | baseline-zeros | 5.0 | 1.36 | 0.679 | 0.076 | 4 |
-| None | open-powder-ensemble | 4.7 | 1.31 | 0.587 | 0.066 | 4 |
-| None | **open-powder-ml** | -1.2 | 1.39 | 0.599 | 0.067 | 4 |
+| 1 | baseline-wpc | 7.3 | 1.23 | 0.559 | 0.059 | 5 |
+| 2 | baseline-zeros | 4.6 | 1.33 | 0.666 | 0.071 | 5 |
+| 3 | open-powder-ensemble | 4.4 | 1.29 | 0.589 | 0.064 | 5 |
+| 4 | baseline-gfs | 3.3 | 1.24 | – | – | 5 |
+| 5 | baseline-openmeteo | 3.3 | 1.24 | – | – | 5 |
+| 6 | baseline-aifs | 3.2 | 1.32 | – | – | 5 |
+| 11 | **open-powder-ml** | -1.5 | 1.37 | 0.604 | 0.064 | 5 |
 
-### stations — **#13** of 16 (Powder Accuracy -21.4, 13 rounds)
+### stations — **#13** of 18 (Powder Accuracy -15.5, 14 rounds)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
-| 1 | baseline-consensus | 29.3 | 0.78 | – | – | 15 |
-| 2 | baseline-wpc | 26.1 | 0.76 | 0.289 | 0.014 | 12 |
-| 3 | house-blend | 22.7 | 0.86 | 0.395 | 0.026 | 13 |
-| 4 | baseline-ukmo | 22.4 | 0.88 | – | – | 16 |
-| 5 | baseline-ecmwf | 18.4 | 0.93 | – | – | 7 |
-| 6 | baseline-icon | 18.2 | 0.93 | – | – | 16 |
-| 13 | **open-powder-ml** | -21.4 | 1.61 | 0.532 | 0.021 | 13 |
+| 1 | baseline-consensus | 31.2 | 0.74 | – | – | 16 |
+| 2 | baseline-wpc | 29.1 | 0.71 | 0.270 | 0.013 | 13 |
+| 3 | house-blend | 25.7 | 0.81 | 0.370 | 0.024 | 14 |
+| 4 | baseline-ukmo | 24.8 | 0.83 | – | – | 17 |
+| 5 | baseline-icon | 20.2 | 0.88 | – | – | 17 |
+| 6 | baseline-ecmwf | 18.4 | 0.93 | – | – | 7 |
+| 13 | **open-powder-ml** | -15.5 | 1.50 | 0.497 | 0.020 | 14 |
