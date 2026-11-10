@@ -1,13 +1,13 @@
 {
  "bundle": "nh",
- "cycle": "2026-11-10T00Z",
+ "cycle": "2026-11-10T12Z",
  "final": false,
  "merged": true,
- "pr": "https://github.com/andrewnakas/powderbench/pull/478",
- "submissions": 1,
- "submitted_utc": "2026-11-10T07:22:57+00:00",
+ "pr": "https://github.com/andrewnakas/powderbench/pull/485",
+ "submissions": 2,
+ "submitted_utc": "2026-11-10T19:11:16+00:00",
  "tiers": {
-  "t1": 3294
+  "t1": 3474
  },
- "updates": 0
+ "updates": 1
 }
