@@ -21,7 +21,7 @@ contract as any other competitor:
 ## Standing
 
 <!-- scoreboard:start -->
-_Updated 2026-11-12 02:31 UTC from PowderBench leaderboards._
+_Updated 2026-11-13 02:17 UTC from PowderBench leaderboards._
 
 ### alps — **#1** of 15 (Powder Accuracy -1.3, 6 rounds)
 
