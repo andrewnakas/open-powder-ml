@@ -47,9 +47,12 @@ CONUS_MODELS = ("ncep_nbm_conus", "ncep_hrrr_conus")
 LIVE_ONLY = ("ecmwf_aifs025_single",)
 
 VARS = ("precipitation", "temperature_2m", "snowfall")
-# The archive has precip + temperature for nearly every model but snowfall for
-# few; training uses our own snow physics, which also halves the quota cost.
+# The first harvest took precip + temperature only (training used our own snow
+# physics). The models' own snowfall is archived too, for every model here but
+# ECMWF IFS (checked 2026-11); it is what PowderBench's model baselines and
+# their consensus are made of, and is harvested as separate `snow__` units.
 ARCHIVE_VARS = ("precipitation", "temperature_2m")
+SNOW_VARS = ("snowfall",)
 BATCH = 20
 UA = {"User-Agent": "open-powder-ml (+https://github.com/open-powder-ml)"}
 
@@ -151,7 +154,8 @@ def _frame(res: dict, station_id: str, models: tuple[str, ...], leads: tuple[int
             suf = f"_previous_day{k}" if k else ""
             # a single-model request returns unsuffixed names
             cols = {v: h.get(f"{v}{suf}_{m}") if len(models) > 1 else h.get(f"{v}{suf}") for v in variables}
-            if cols["precipitation"] is None or all(x is None for x in cols["precipitation"]):
+            first = cols[variables[0]]  # precipitation, or snowfall for a snowfall-only harvest
+            if first is None or all(x is None for x in first):
                 continue
             f = pd.DataFrame({"time": t, **{v: cols.get(v) or [None] * len(t) for v in VARS}})
             f["model"], f["lead"] = m, k

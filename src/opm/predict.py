@@ -47,6 +47,7 @@ class Result:
     df: pd.DataFrame  # the submission
     raw: pd.DataFrame  # station_id, horizon_h, raw_in (pre online bias), tier
     info: dict
+    X: pd.DataFrame | None = None  # what the model saw, featured rows (see save_features)
 
 
 def _daily(r: Round, st: pd.DataFrame, models: tuple[str, ...] | None, ledger) -> pd.DataFrame:
@@ -63,7 +64,8 @@ def _daily(r: Round, st: pd.DataFrame, models: tuple[str, ...] | None, ledger) -
     return daily(h)
 
 
-def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | None) -> pd.DataFrame:
+def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | None,
+           keep: list | None = None) -> pd.DataFrame:
     """Tier 0 from every model fetched; tier 1 from only the models the
     bundle was trained on (so cross-model summaries mean the same thing).
     as_league: the league whose truth flavour the bundle should predict."""
@@ -79,6 +81,8 @@ def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | Non
     if Xg.empty:
         return _with_density(t0, X)
     Xg["league_code"] = NH_LEAGUES.index(as_league) if as_league in NH_LEAGUES else len(NH_LEAGUES)
+    if keep is not None:
+        keep.append(Xg)
     t1 = gbm.predict(bundle, Xg)
     t1["tier"] = "t1"
     ok = Xg["cons_slr"].notna().to_numpy() & (Xg["nmod"].to_numpy() >= 2)
@@ -163,7 +167,8 @@ def build(r: Round, network: bool = True, budget: float | None = None) -> Result
     info = {"round": r.key, "bundle": bname, "quota_note": None}
 
     proxy = r.league if bname == r.league else PROXY_LEAGUE.get(r.league, r.league)
-    parts = [_model(_daily(r, reg.loc[feat_ids], None, ledger), r, proxy, bundle)]
+    seen: list = []
+    parts = [_model(_daily(r, reg.loc[feat_ids], None, ledger), r, proxy, bundle, keep=seen)]
 
     carried = _carry_over(r.league, r.round_date, set(net_ids)) if network else pd.DataFrame()
     todo = sorted(set(net_ids) - set(carried.get("station_id", [])))
@@ -195,7 +200,23 @@ def build(r: Round, network: bool = True, budget: float | None = None) -> Result
         tiers=raw["tier"].value_counts().to_dict(),
         openmeteo_weight=round(ledger.used - used0, 1),
     )
-    return Result(df=df, raw=raw, info=info)
+    return Result(df=df, raw=raw, info=info, X=seen[0].reset_index(drop=True) if seen else None)
+
+
+def save_features(res: Result, path: Path, reason: str = "") -> None:
+    """The feature rows behind a submission (featured stations), so a round
+    can be re-predicted and compared with what the archive says the same
+    forecast looked like. One file per round, replaced by each later pass like
+    the history CSV; the pass is stored in it."""
+    if res.X is None or res.X.empty:
+        return
+    X = res.X.copy()
+    num = X.select_dtypes("number").columns.difference(["horizon_h"])
+    X[num] = X[num].astype("float32").round(4)
+    meta = {"pass_reason": reason, "built_utc": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%MZ")}
+    X = pd.concat([X, pd.DataFrame(meta, index=X.index)], axis=1)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    X.to_parquet(path, index=False, compression="zstd")
 
 
 def sanitize(pred: pd.DataFrame) -> pd.DataFrame:

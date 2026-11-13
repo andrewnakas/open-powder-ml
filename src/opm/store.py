@@ -113,9 +113,20 @@ def push(tag: str, files: list[Path]) -> None:
 
 
 def load_daily(league: str) -> pd.DataFrame:
+    # lead-matched recent archive + the stitched 2022-24 history (stitched=1 rows)
     files = sorted(STORE.glob(f"daily__{league}__*.parquet")) + sorted(STORE.glob(f"hist__{league}__*.parquet"))
     if not files:
         return pd.DataFrame()
+    key = ["station_id", "model", "lead", "date"]
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
     df["date"] = pd.to_datetime(df["date"]).dt.date
-    return df.drop_duplicates(["station_id", "model", "lead", "date"], keep="last")
+    df = df.drop_duplicates(key, keep="last")
+    # the models' own snowfall, harvested later as `snow__<unit>` files
+    sf = [f for kind in ("daily", "hist") for f in sorted(STORE.glob(f"snow__{kind}__{league}__*.parquet"))]
+    if sf:
+        sn = pd.concat([pd.read_parquet(f) for f in sf], ignore_index=True)
+        sn["date"] = pd.to_datetime(sn["date"]).dt.date
+        sn = sn.drop_duplicates(key, keep="last").rename(columns={"snow": "_snow"})
+        df = df.merge(sn[[*key, "_snow"]], on=key, how="left")
+        df["snow"] = df["snow"].fillna(df.pop("_snow"))
+    return df

@@ -80,8 +80,25 @@ def add_oof_ratio(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+SNOW_FEATS = ("cons_snow", "nsnow", "max_snow", "sd_snow")
+SNOW_MIN_COVER = 0.8
+
+
+def snow_ready(df: pd.DataFrame) -> bool:
+    """The models' own snowfall is harvested after the rest of the archive.
+    Until it covers most rows that have deterministic models at all, a tree
+    would learn "snowfall missing" as a stand-in for the date, so the whole
+    family stays out of the model."""
+    if "nsnow" not in df or "nmod" not in df:
+        return False
+    det = df["nmod"].fillna(0) > 0
+    return bool(det.any()) and float((df.loc[det, "nsnow"].fillna(0) > 0).mean()) >= SNOW_MIN_COVER
+
+
 def feature_list(df: pd.DataFrame) -> list[str]:
     cols = [c for c in df.columns if c not in NON_FEATURES and pd.api.types.is_numeric_dtype(df[c])]
+    if not snow_ready(df):
+        cols = [c for c in cols if c not in SNOW_FEATS and not c.startswith("snow__")]
     return [c for c in cols if df[c].notna().any()]
 
 
@@ -121,7 +138,7 @@ def _ps(pred: np.ndarray, d: pd.DataFrame) -> float | None:
 def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list) -> dict:
     """Season-wise CV of the median model (the MAE-optimal point forecast that
     Powder Accuracy judges): each fold season is held out, the rest train."""
-    scores, raw = [], []
+    scores, raw, snow, ours_snow = [], [], [], []
     for s in folds:
         is_va = df["season"] == s
         tr, va = df.loc[~is_va, [*feats, "truth_in"]], df[is_va]
@@ -136,14 +153,26 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
         m, _ = _train(ds, {"objective": "quantile", "alpha": 0.5}, _data(va[feats], va["truth_in"], ds),
                       params=params)
         del ds
-        scores.append(_ps(np.clip(m.predict(va[feats], num_iteration=m.best_iteration or None), 0, None), va))
+        pred = np.clip(m.predict(va[feats], num_iteration=m.best_iteration or None), 0, None)
+        scores.append(_ps(pred, va))
         vr = va.dropna(subset=[REF]) if REF in va else va.iloc[:0]
         raw.append(_ps(vr[REF].to_numpy(), vr) if len(vr) else None)
+        # the consensus of the models' own snowfall is what PowderBench's
+        # baseline-consensus is, and the comparison that matters live; ours on
+        # the same rows next to it
+        vs = va.dropna(subset=["cons_snow"]) if "cons_snow" in va else va.iloc[:0]
+        if len(vs):
+            snow.append(_ps(vs["cons_snow"].to_numpy(), vs))
+            ours_snow.append(_ps(pred[va.index.get_indexer(vs.index)], vs))
     ok = [x for x in scores if x is not None]
     rk = [x for x in raw if x is not None]
+    sk = [x for x in snow if x is not None]
+    osk = [x for x in ours_snow if x is not None]
     return {"folds": [str(f) for f in folds], "per_fold": scores,
             "powder_score": round(float(np.mean(ok)), 2) if ok else None,
-            "raw_consensus": round(float(np.mean(rk)), 2) if rk else None}
+            "raw_consensus": round(float(np.mean(rk)), 2) if rk else None,
+            "snow_consensus": round(float(np.mean(sk)), 2) if sk else None,
+            "powder_score_snow_rows": round(float(np.mean(osk)), 2) if osk else None}
 
 
 def tune(df: pd.DataFrame, feats: list[str], champion: dict | None = None) -> tuple[dict, dict]:
@@ -160,7 +189,8 @@ def tune(df: pd.DataFrame, feats: list[str], champion: dict | None = None) -> tu
     for i, p in enumerate(cands):
         r = cross_validate(df, feats, p, folds)
         r["label"] = "champion" if champion is not None and p == champion else f"grid{i}"
-        print(f"  cv {r['label']}: {r['powder_score']} (raw {r['raw_consensus']}) per fold {r['per_fold']}",
+        print(f"  cv {r['label']}: {r['powder_score']} (raw {r['raw_consensus']}, snowfall consensus "
+              f"{r.get('snow_consensus')} vs ours {r.get('powder_score_snow_rows')}) per fold {r['per_fold']}",
               flush=True)
         results.append((r["powder_score"] if r["powder_score"] is not None else -1e9, p, r))
     best = max(results, key=lambda x: x[0])
@@ -263,6 +293,8 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
     if cv:
         metrics["cv_powder_score"] = cv["best"]["powder_score"]
         metrics["cv_raw_consensus"] = cv["best"]["raw_consensus"]
+        metrics["cv_snow_consensus"] = cv["best"].get("snow_consensus")
+        metrics["cv_powder_score_snow_rows"] = cv["best"].get("powder_score_snow_rows")
         metrics["cv"] = cv
         champ = next((r for r in cv["all"] if r.get("label") == "champion"), None)
         metrics["cv_champion_params"] = champ["powder_score"] if champ else None

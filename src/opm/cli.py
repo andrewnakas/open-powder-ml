@@ -93,6 +93,7 @@ def run(
             hist = schedule.HISTORY / r.league / f"{r.round_date}.csv"
             hist.parent.mkdir(parents=True, exist_ok=True)
             res.raw.round(3).to_csv(hist, index=False)
+            predict.save_features(res, hist.with_suffix(".features.parquet"), reason=a.reason)
             st = schedule.load_state(r)
             cyc = schedule.latest_cycle(datetime.now(timezone.utc))
             note = f"Model: {res.info['bundle'] or 'tier-0 ensemble'} · NWP cycle {cyc} · rows {res.info['rows']}"
@@ -193,6 +194,11 @@ def _better(new: dict, old: dict) -> bool:
     if new.get("cv_powder_score") is not None:
         ref = new.get("cv_raw_consensus")
         if ref is not None and new["cv_powder_score"] < ref + 2:
+            return False
+        # the models' own snowfall consensus (PowderBench's baseline-consensus) is
+        # the bar that counts live: don't promote a model that loses to it
+        sc, on = new.get("cv_snow_consensus"), new.get("cv_powder_score_snow_rows")
+        if sc is not None and on is not None and on < sc:
             return False
         # vs the champion: its own settings were re-scored on these same folds
         # and rows (an old stored CV score was measured on different data)

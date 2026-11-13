@@ -63,6 +63,22 @@ def daily(hourly: pd.DataFrame) -> pd.DataFrame:
     return d[["station_id", "model", "lead", "date", *DAILY_COLS]]
 
 
+def daily_snow(hourly: pd.DataFrame) -> pd.DataFrame:
+    """The models' own snowfall (inches) per (station_id, model, lead, local
+    date), from a snowfall-only archive request; same day rule as `daily`."""
+    cols = ["station_id", "model", "lead", "date", "snow"]
+    if hourly.empty:
+        return pd.DataFrame(columns=cols)
+    h = hourly.copy()
+    h["date"] = (pd.to_datetime(h["time"]) - pd.Timedelta(hours=1)).dt.date
+    h["sn"] = pd.to_numeric(h["snowfall"], errors="coerce")
+    d = h.groupby(["station_id", "model", "lead", "date"], sort=False).agg(
+        snow=("sn", "sum"), n=("sn", "count")).reset_index()
+    d = d[d["n"] >= 20]
+    d["snow"] /= 2.54  # cm -> in
+    return d[cols]
+
+
 def _windows(d: pd.DataFrame) -> pd.DataFrame:
     """d has station_id, model, round_date, i (day index 0..2) + daily vars ->
     cumulative windows per horizon, only where every day is present."""
@@ -94,6 +110,8 @@ def live_windows(dly: pd.DataFrame, round_date: date) -> pd.DataFrame:
     return _windows(d)
 
 
+# no archived snowfall: ECMWF IFS (null in previous-runs) and the live-only AIFS
+SNOW_NOT_ARCHIVED = ("ecmwf_ifs025", "ecmwf_aifs025_single")
 STITCHED = 9  # `lead` code for the historical-forecast archive (short-lead runs stitched together)
 
 
@@ -136,7 +154,14 @@ def wide(win: pd.DataFrame) -> pd.DataFrame:
     p["max_slr"] = p[slr_cols].max(axis=1)
     p["min_slr"] = p[slr_cols].min(axis=1)
     p["sd_slr"] = p[slr_cols].std(axis=1)
-    p["cons_snow"] = p[snow_cols].median(axis=1)
+    # the consensus of the models' own snowfall, built like PowderBench's
+    # baseline-consensus (median, at least 3 models) but only from models whose
+    # snowfall is in the archive, so it means the same live and in training
+    cs = [c for c in snow_cols if c.split("__", 1)[1] not in SNOW_NOT_ARCHIVED]
+    p["nsnow"] = p[cs].notna().sum(axis=1)
+    p["cons_snow"] = p[cs].median(axis=1).where(p["nsnow"] >= 3)
+    p["max_snow"] = p[cs].max(axis=1)
+    p["sd_snow"] = p[cs].std(axis=1)
     p["cons_prcp"] = p[prcp_cols].median(axis=1)
     p["cons_swe"] = p[swe_cols].median(axis=1)
     p["cons_twet"] = p[tw_cols].median(axis=1)

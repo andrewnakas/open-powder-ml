@@ -89,10 +89,24 @@ def run(leagues: list[str], budget: float, network_sample: int = 0, end: date | 
     todo.sort(key=_priority)
     # then the older winters (lead-matched recent data first: it's what live looks like)
     todo += [u for lg in leagues for u in hist_units(lg, network_sample) if u[0] not in have]
+    # the models' own snowfall for every unit (a third of the first harvest's
+    # cost: one variable instead of two), newest and snowiest first
+    snow = [u for lg in leagues for u in units(lg, ARCHIVE_BEGIN, end, network_sample)]
+    snow.sort(key=_priority)
+    snow += [u for lg in leagues for u in hist_units(lg, network_sample)]
+    todo += [(f"snow__{u[0]}", *u[1:]) for u in snow if f"snow__{u[0]}" not in have]
     print(f"backfill: {len(todo)} units to go, budget {budget:.0f} (used today {ledger.used:.0f})")
     try:
         for name, a, b, part, models in todo:
-            if name.startswith("hist__"):
+            if name.startswith("snow__"):
+                hist = name.startswith("snow__hist__")
+                h = om.fetch_hourly(part, a, b, models, leads=(0,) if hist else (1, 2, 3), ledger=ledger,
+                                    url=om.HISTORICAL_URL if hist else None, variables=om.SNOW_VARS,
+                                    cache=WORK / "cache" / ("historical-snow" if hist else "previous-runs-snow"))
+                d = features.daily_snow(h)
+                if hist and len(d):
+                    d["lead"] = features.STITCHED
+            elif name.startswith("hist__"):
                 h = om.fetch_hourly(part, a, b, models, leads=(0,), ledger=ledger, url=om.HISTORICAL_URL,
                                     variables=om.ARCHIVE_VARS, cache=WORK / "cache" / "historical")
                 d = features.daily(h)

@@ -1,24 +1,29 @@
-"""Online layer: a shrunk multiplicative bias from our own resolved rounds.
+"""Online layer: a shrunk multiplicative correction from our own resolved rounds.
 
-Every round PowderBench resolves gives truth for what we actually submitted.
-Per league (and per station where it has enough snow), ratio =
-(sum truth + K) / (sum forecast + K) over the last N rounds, clipped. This is
-what lets resorts-na / resorts — with no long truth archive to train on —
-learn each resort's reporting habits, and keeps every league honest when
-the season's regime drifts from training.
+Every round PowderBench resolves gives truth for what our model said. Per
+league, the factor is the multiplier of the model's own output (`raw_in`) that
+would have given the lowest mean absolute error over the last N rounds, which
+is what Powder Accuracy scores.
 
-It is deliberately slow to act. One storm cycle is one piece of evidence, not
-a thousand station-inches of it, so the league factor is shrunk by the number
-of resolved *rounds* and stays off until there are MIN_ROUNDS of them. (The
-first version trusted four under-forecast rounds fully, and a station with no
-history inherited the league factor on top of it: every stations-league
-forecast went out at 2 x 2 = 4x the model for the 10-31..11-04 rounds.)
+It is not the ratio of total truth to total forecast. A median forecast of
+snowfall sits well below the mean on purpose (most days are dry, a few are
+big), so that ratio is far above 1 even for a forecast no multiplier can
+improve: on the first 13 stations rounds it was 1.95 while the error-minimising
+factor was 1.15, on observers 1.60 against 0.80. Two earlier versions used it;
+the first sent every stations forecast out at 4x the model for the
+10-31..11-04 rounds, the second at 1.5x.
+
+It is deliberately slow to act: off until MIN_ROUNDS resolved rounds, then
+shrunk toward 1 by the number of rounds and clipped. Walking forward over the
+resolved rounds (scripts/replay.py) no version of this layer has yet beaten the
+model's own output, and per-station factors did no better, so there are none.
 """
 
 from __future__ import annotations
 
 from datetime import date
 
+import numpy as np
 import pandas as pd
 
 from .. import QCOLS, ROOT
@@ -30,10 +35,10 @@ from ..truth import resolved_rounds
 HISTORY = ROOT / "history"
 
 LOOKBACK_ROUNDS = 30
-K_LEAGUE, K_STATION = 15.0, 8.0
 MIN_ROUNDS = 8  # resolved rounds of ours before any correction
-ROUND_K = 10.0  # rounds of pseudo-evidence for "no bias"
-CLIP = (0.67, 1.5)  # on the league factor, the station factor and their product
+ROUND_K = 20.0  # rounds of pseudo-evidence for "no correction"
+CLIP = (0.67, 1.5)
+GRID = np.round(np.arange(0.6, 1.601, 0.05), 2)
 
 
 def our_history(league: str, before: date) -> pd.DataFrame:
@@ -54,22 +59,18 @@ def our_history(league: str, before: date) -> pd.DataFrame:
 
 
 def factors(league: str, before: date) -> tuple[float, dict[str, float]]:
+    """(league factor, per-station factors). The station part is empty: kept
+    in the signature for callers and for when the record supports it."""
     h = our_history(league, before)
     if h.empty:
         return 1.0, {}
-    h = h[h["horizon_h"] == 24]
     n = h["round_date"].nunique()
     if n < MIN_ROUNDS:
         return 1.0, {}
-    lg = (h["truth_in"].sum() + K_LEAGUE) / (h["snowfall_in"].sum() + K_LEAGUE)
+    f, t = h["snowfall_in"].to_numpy(float), h["truth_in"].to_numpy(float)
+    lg = float(GRID[int(np.argmin([np.abs(f * x - t).sum() for x in GRID]))])
     lg = 1.0 + (lg - 1.0) * n / (n + ROUND_K)
-    lg = min(max(lg, CLIP[0]), CLIP[1])
-    # the station factor is what is left after the league factor, so a
-    # station with no snow on record gets 1.0 (the prior), not the league
-    # factor a second time
-    g = h.groupby("station_id").agg(t=("truth_in", "sum"), f=("snowfall_in", "sum"))
-    st = ((g["t"] + K_STATION) / (g["f"] * lg + K_STATION)).clip(*CLIP)
-    return float(lg), st.to_dict()
+    return float(min(max(lg, CLIP[0]), CLIP[1])), {}
 
 
 def apply(pred: pd.DataFrame, league: str, before: date) -> pd.DataFrame:
