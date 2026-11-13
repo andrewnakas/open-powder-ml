@@ -19,7 +19,7 @@ from . import HORIZONS, NETWORK_MODELS, NH_LEAGUES, OWN_BUNDLE_LEAGUES, PROXY_LE
 from .contract import Round, stations
 from .dataset import feature_rows
 from .features import daily
-from .models import fallback, gbm, online
+from .models import fallback, gbm, online, stack
 from .sources import openmeteo as om
 from .store import MODELS
 
@@ -178,11 +178,15 @@ def build(r: Round, network: bool = True, budget: float | None = None) -> Result
     pred = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=[*COLS, "tier"])
     pred["raw_in"] = pred["snowfall_in"]
     pred = online.apply(pred, r.league, r.round_date)
+    pred["model_in"] = pred["snowfall_in"]
+    # blend with the public baseline that has complemented the model best so
+    # far (rows carried over from an earlier pass keep what that pass decided)
+    pred, info["stack"] = stack.apply(pred, r.league, r.round_date)
     if len(carried):
         keep = carried[~carried["station_id"].isin(pred["station_id"])]
         pred = pd.concat([pred, keep], ignore_index=True)
     df = sanitize(pred)
-    raw = pred[["station_id", "horizon_h", "raw_in", "snowfall_in", *QCOLS, "prob_6in", "tier"]
+    raw = pred[["station_id", "horizon_h", "raw_in", "model_in", "snowfall_in", *QCOLS, "prob_6in", "tier"]
                + (["dens"] if "dens" in pred else [])]
     fe = set(feat_ids)
     info.update(
