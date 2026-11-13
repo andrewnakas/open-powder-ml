@@ -85,16 +85,27 @@ def feature_list(df: pd.DataFrame) -> list[str]:
     return [c for c in cols if df[c].notna().any()]
 
 
-def _train(X, y, obj: dict, Xv=None, yv=None, rounds: int | None = None, params: dict | None = None):
+def _data(X, y, reference: lgb.Dataset | None = None) -> lgb.Dataset:
+    """A LightGBM dataset that keeps only its binned copy (the raw frame is
+    freed once binned). One dataset serves every model with the same rows and
+    label, e.g. the five quantile levels."""
+    return lgb.Dataset(X, y, reference=reference)
+
+
+def _train(ds: lgb.Dataset, obj: dict, dv: lgb.Dataset | None = None, rounds: int | None = None,
+           params: dict | None = None):
     params = params or PARAMS
-    ds = lgb.Dataset(X, y, free_raw_data=False)
-    if rounds is None and Xv is not None:
-        dv = lgb.Dataset(Xv, yv, reference=ds)
+    if rounds is None and dv is not None:
         b = lgb.train({**params, **obj}, ds, MAX_ROUNDS, valid_sets=[dv],
                       callbacks=[lgb.early_stopping(100, verbose=False)])
-        return b, b.best_iteration or MAX_ROUNDS
-    b = lgb.train({**params, **obj}, ds, rounds or 600)
-    return b, rounds or 600
+        n = b.best_iteration or MAX_ROUNDS
+    else:
+        n = rounds or 600
+        b = lgb.train({**params, **obj}, ds, n)
+    # A booster otherwise keeps its training data alive for as long as it
+    # lives; with a dozen models per bundle that ran the CI runner out of memory.
+    b.free_dataset()
+    return b, n
 
 
 def _ps(pred: np.ndarray, d: pd.DataFrame) -> float | None:
@@ -112,15 +123,19 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
     Powder Accuracy judges): each fold season is held out, the rest train."""
     scores, raw = [], []
     for s in folds:
-        tr, va = df[df["season"] != s], df[df["season"] == s]
+        is_va = df["season"] == s
+        tr, va = df.loc[~is_va, [*feats, "truth_in"]], df[is_va]
         if "aug" in va:
             va = va[va["aug"] == 0]
         if "featured" in va and va["featured"].any():  # score like the headline board
             va = va[va["featured"] == 1]
         if tr.empty or va.empty:
             continue
-        m, _ = _train(tr[feats], tr["truth_in"], {"objective": "quantile", "alpha": 0.5},
-                      va[feats], va["truth_in"], params=params)
+        ds = _data(tr[feats], tr["truth_in"])
+        del tr
+        m, _ = _train(ds, {"objective": "quantile", "alpha": 0.5}, _data(va[feats], va["truth_in"], ds),
+                      params=params)
+        del ds
         scores.append(_ps(np.clip(m.predict(va[feats], num_iteration=m.best_iteration or None), 0, None), va))
         vr = va.dropna(subset=[REF]) if REF in va else va.iloc[:0]
         raw.append(_ps(vr[REF].to_numpy(), vr) if len(vr) else None)
@@ -191,34 +206,43 @@ def finish(raw: pd.DataFrame, h: pd.Series, scale) -> pd.DataFrame:
 
 
 def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> Bundle:
-    """Settings are tuned by season-wise CV; then the last season is held out
+    """Settings are tuned by season-wise CV; then the newest full season is held out
     for early stopping, quantile calibration and metrics, and the final models
     are refit on everything with the chosen round counts."""
     df = add_oof_ratio(df)
     feats = feature_list(df)
     params, cv = tune(df, feats, champion_params)
     seasons = sorted(df["season"].unique())
-    if len(seasons) > 1 or holdout is not None:
-        holdout = holdout if holdout is not None else seasons[-1]
+    # Seasons with a real share of the rows. One that has barely started (a
+    # few October rounds, mostly bare ground) must not set the round counts
+    # and the quantile calibration, so it is never the held-out season.
+    counts = df["season"].value_counts()
+    real = [s for s in seasons if counts[s] >= 0.05 * len(df)]
+    if holdout is None and len(real) > 1:
+        holdout = real[-1]
+    if holdout is not None:
         is_va = df["season"] == holdout
-    else:  # a single season so far: hold out its last 30% of round dates
+    else:  # a single full season so far: hold out the last 30% of round dates
         cut = sorted(df["round_date"].unique())[int(0.7 * df["round_date"].nunique())]
         is_va = df["round_date"] >= cut
-        holdout = f"{seasons[0]}-tail"
-    tr, va = df[~is_va], df[is_va]
+        holdout = f"{(real or seasons)[-1]}-tail"
+    is_va = is_va.to_numpy()
+    is_24 = (df["horizon_h"] == 24).to_numpy()
+    powder = (df["truth_in"] >= POWDER_IN).astype(int)
+    va = df[is_va]
+    n_train = int((~is_va).sum())
 
     rounds, models_va = {}, {}
+    ds = _data(df.loc[~is_va, feats], df.loc[~is_va, "truth_in"])
+    dv = _data(va[feats], va["truth_in"], ds)
     for a in QUANTILES:
-        m, n = _train(tr[feats], tr["truth_in"], {"objective": "quantile", "alpha": a},
-                      va[feats] if va is not None else None, va["truth_in"] if va is not None else None,
-                      params=params)
+        m, n = _train(ds, {"objective": "quantile", "alpha": a}, dv, params=params)
         rounds[str(a)], models_va[a] = n, m
-    t24 = tr[tr["horizon_h"] == 24]
-    v24 = va[va["horizon_h"] == 24] if va is not None else None
-    clf_va, n = _train(t24[feats], (t24["truth_in"] >= POWDER_IN).astype(int), {"objective": "binary"},
-                       v24[feats] if v24 is not None else None,
-                       (v24["truth_in"] >= POWDER_IN).astype(int) if v24 is not None else None, params=params)
+    ds = _data(df.loc[~is_va & is_24, feats], powder[~is_va & is_24])
+    dv = _data(df.loc[is_va & is_24, feats], powder[is_va & is_24], ds)
+    clf_va, n = _train(ds, {"objective": "binary"}, dv, params=params)
     rounds["clf"] = n
+    del ds, dv
 
     scale, metrics = {}, {}
     if "aug" in va:  # calibrate and score on the full-model rows only
@@ -235,7 +259,7 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
 
         metrics = score(va.assign(**{c: pred[c] for c in pred.columns}))
         metrics["holdout_season"] = str(holdout)
-        metrics["n_train"] = int(len(tr))
+        metrics["n_train"] = n_train
     if cv:
         metrics["cv_powder_score"] = cv["best"]["powder_score"]
         metrics["cv_raw_consensus"] = cv["best"]["raw_consensus"]
@@ -245,11 +269,13 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
     metrics["cons_slr_p99"] = {str(int(h)): float(g.quantile(0.99))
                                for h, g in df.groupby("horizon_h")["cons_slr"]}
 
-    final_q = {a: _train(df[feats], df["truth_in"], {"objective": "quantile", "alpha": a},
+    del models_va, clf_va
+    ds = _data(df[feats], df["truth_in"])
+    final_q = {a: _train(ds, {"objective": "quantile", "alpha": a},
                          rounds=max(50, int(rounds[str(a)] * 1.1)), params=params)[0] for a in QUANTILES}
-    d24 = df[df["horizon_h"] == 24]
-    final_clf = _train(d24[feats], (d24["truth_in"] >= POWDER_IN).astype(int), {"objective": "binary"},
-                       rounds=max(50, int(rounds["clf"] * 1.1)), params=params)[0]
+    ds = _data(df.loc[is_24, feats], powder[is_24])
+    final_clf = _train(ds, {"objective": "binary"}, rounds=max(50, int(rounds["clf"] * 1.1)), params=params)[0]
+    del ds
     return Bundle(features=feats, quantile_models=final_q, clf=final_clf, scale=scale,
                   stn_ratio=station_ratio(df), rounds=rounds, metrics=metrics, params=params,
                   trained_through=str(max(df["round_date"])))

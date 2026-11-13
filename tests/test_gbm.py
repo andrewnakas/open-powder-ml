@@ -35,3 +35,12 @@ def test_fit_predict_is_calibrated_and_monotone():
     big = X["cons_slr"].to_numpy() > 4
     ratio = out.loc[big, "p50"].sum() / X.loc[big, "cons_slr"].sum()
     assert 0.55 < ratio < 0.85
+
+
+def test_holdout_skips_a_season_that_has_barely_started(monkeypatch):
+    monkeypatch.setattr(gbm, "MAX_ROUNDS", 100)
+    df = _table(n_days=283)  # 273 days of season 2024, then 10 days of 2025 (3.5% of rows)
+    b = gbm.fit(df)
+    assert b.metrics["holdout_season"] == "2024-tail"  # not the 10-day season, and not all of 2024 either
+    assert b.metrics["n_train"] > 0.6 * len(df)
+    assert not any(hasattr(m, "train_set") for m in b.quantile_models.values())  # boosters don't pin their data
