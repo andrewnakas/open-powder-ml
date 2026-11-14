@@ -149,3 +149,4 @@ def test_single_days_and_spread_exist_live_and_in_the_archive():
             r.loc[72, "cons_slr"], rel=0.01)
         assert r.loc[48, "q25_slr"] < r.loc[48, "cons_slr"] < r.loc[48, "q75_slr"]
         assert r.loc[24, "cons_tmin"] == pytest.approx(-5.0)
+        assert r.loc[24, "cons_slr_next"] == pytest.approx(r.loc[48, "cons_slr_d1"]) and "cons_prcp_next" in r

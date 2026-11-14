@@ -102,6 +102,9 @@ def _windows(d: pd.DataFrame) -> pd.DataFrame:
             day = w[w["i"] == i].groupby(keys, sort=False)[["slr", "prcp", "swe", "twet"]].first()
             for v in day.columns:
                 agg[f"{v}_d{i}"] = day[v]
+        if n < 3:  # the day just after the window: a storm forecast a day late is still a storm
+            nxt = d[d["i"] == n].groupby(keys, sort=False)[["slr", "prcp"]].first()
+            agg["slr_next"], agg["prcp_next"] = nxt["slr"], nxt["prcp"]
         agg = agg[agg["n"] == n].drop(columns="n").reset_index()
         agg["horizon_h"] = h
         out.append(agg)
@@ -183,7 +186,7 @@ def wide(win: pd.DataFrame) -> pd.DataFrame:
     p["stitched"] = win.groupby(keys)["stitched"].max() if "stitched" in win else 0
     summarize(p)
     # medians across models of values that have no per-model column
-    more = [c for c in win.columns if c == "tmin" or c.startswith(("slr_d", "prcp_d", "swe_d", "twet_d"))]
+    more = [c for c in win.columns if c == "tmin" or c.startswith(("slr_d", "prcp_d", "swe_d", "twet_d", "slr_next", "prcp_next"))]
     if more:
         g = win.groupby(keys)[more].median()
         for c in more:

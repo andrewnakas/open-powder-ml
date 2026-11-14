@@ -46,7 +46,8 @@ CV_FOLDS = 3  # the most recent seasons, each held out in turn
 FEATURED_WEIGHT = 1.0
 # Columns that exist in the table but stay out of the model until an
 # experiment (models/experiments.py) shows they help; matched by prefix.
-EXPERIMENTAL = ("cons_tmin", "q25_slr", "q75_slr", "cons_swe_d", "cons_twet_d", "sd_slr_d", "max_slr_d")
+EXPERIMENTAL = ("cons_tmin", "q25_slr", "q75_slr", "cons_swe_d", "cons_twet_d", "sd_slr_d", "max_slr_d",
+                "cons_slr_next", "cons_prcp_next")
 
 
 @dataclass

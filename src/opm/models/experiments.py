@@ -94,6 +94,7 @@ VARIANTS = {
     "p_l255": lambda df: {"params": {"num_leaves": 255, "min_child_samples": 150}},
     "no_days": lambda df: {"drop": ("cons_slr_d", "cons_prcp_d")},  # adopted 2026-11-14 (+1.15 CV in opm)
     "f_dayphys": lambda df: {"extra": ("cons_swe_d", "cons_twet_d")},
+    "f_next": lambda df: {"extra": ("cons_slr_next", "cons_prcp_next")},
     "f_dayspread": lambda df: {"extra": ("sd_slr_d", "max_slr_d")},
     "f_spread": lambda df: {"extra": ("q25_slr", "q75_slr")},
     "f_tmin": lambda df: {"extra": ("cons_tmin",)},
