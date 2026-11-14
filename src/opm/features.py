@@ -99,8 +99,9 @@ def _windows(d: pd.DataFrame) -> pd.DataFrame:
         agg["twet"] = tw / ws
         # the single days inside a multi-day window (a 24 h window is its day 0)
         for i in range(n if n > 1 else 0):
-            day = w[w["i"] == i].groupby(keys, sort=False)[["slr", "prcp"]].first()
-            agg[f"slr_d{i}"], agg[f"prcp_d{i}"] = day["slr"], day["prcp"]
+            day = w[w["i"] == i].groupby(keys, sort=False)[["slr", "prcp", "swe", "twet"]].first()
+            for v in day.columns:
+                agg[f"{v}_d{i}"] = day[v]
         agg = agg[agg["n"] == n].drop(columns="n").reset_index()
         agg["horizon_h"] = h
         out.append(agg)
@@ -182,11 +183,16 @@ def wide(win: pd.DataFrame) -> pd.DataFrame:
     p["stitched"] = win.groupby(keys)["stitched"].max() if "stitched" in win else 0
     summarize(p)
     # medians across models of values that have no per-model column
-    more = [c for c in win.columns if c == "tmin" or c.startswith(("slr_d", "prcp_d"))]
+    more = [c for c in win.columns if c == "tmin" or c.startswith(("slr_d", "prcp_d", "swe_d", "twet_d"))]
     if more:
         g = win.groupby(keys)[more].median()
         for c in more:
             p[f"cons_{c}"] = g[c]
+        days = [c for c in more if c.startswith("slr_d")]
+        if days:  # how far the models disagree about each day
+            sd, mx = win.groupby(keys)[days].std(), win.groupby(keys)[days].max()
+            for c in days:
+                p[f"sd_{c}"], p[f"max_{c}"] = sd[c], mx[c]
     return p.reset_index()
 
 

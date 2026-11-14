@@ -89,7 +89,9 @@ VARIANTS = {
     "p_lr02": lambda df: {"params": {"learning_rate": 0.02}},
     "p_ff5": lambda df: {"params": {"feature_fraction": 0.5}},
     "p_l255": lambda df: {"params": {"num_leaves": 255, "min_child_samples": 150}},
-    "f_days": lambda df: {"extra": ("cons_slr_d", "cons_prcp_d")},
+    "no_days": lambda df: {"drop": ("cons_slr_d", "cons_prcp_d")},  # adopted 2026-11-14 (+1.15 CV in opm)
+    "f_dayphys": lambda df: {"extra": ("cons_swe_d", "cons_twet_d")},
+    "f_dayspread": lambda df: {"extra": ("sd_slr_d", "max_slr_d")},
     "f_spread": lambda df: {"extra": ("q25_slr", "q75_slr")},
     "f_tmin": lambda df: {"extra": ("cons_tmin",)},
     "f_all": lambda df: {"extra": gbm.EXPERIMENTAL},
