@@ -46,3 +46,33 @@ def test_blend_moves_toward_a_better_source_and_handles_gaps():
     assert w["good"] > 0.5 and abs(sum(w.values()) - 1) < 1e-6 and w["raw"] > 0  # shrunk toward ours
     p = blend.predict(df, {"raw": 0.5, "partial": 0.5})
     assert p[1] == df["raw"].iloc[1]  # the partner is absent for station B: our own forecast
+
+
+def test_snow_probe_compares_on_covered_rows(monkeypatch):
+    import numpy as np
+    import pandas as pd
+
+    from opm.models import gbm
+
+    rng = np.random.default_rng(0)
+    n = 600
+    df = pd.DataFrame({"season": np.repeat([2023, 2024, 2025], n // 3), "x": rng.normal(size=n),
+                       "truth_in": rng.gamma(1.0, 1.0, n), "climo_p50": 0.5})
+    df["cons_snow"] = df["truth_in"] + rng.normal(0, 0.1, n)
+    df["nsnow"] = np.where(np.arange(n) % 2 == 0, 4, 0)
+    df.loc[df["nsnow"] == 0, "cons_snow"] = np.nan
+    monkeypatch.setattr(gbm, "SNOW_PROBE_MIN_ROWS", 100)
+    monkeypatch.setattr(gbm, "MAX_ROUNDS", 60)
+    params = {**gbm.PARAMS, "min_child_samples": 5, "num_leaves": 7, "learning_rate": 0.2}
+    out = gbm.snow_probe(df, ["x"], params, ["2023", "2024", "2025"])
+    assert out["rows"] == n // 2 and out["with"] > out["without"]
+
+
+def test_stack_partner_is_capped_at_our_p90():
+    import pandas as pd
+
+    from opm.models.stack import capped
+
+    base = pd.Series([11.0, 0.2, 5.0, 3.0])
+    out = capped(base, pd.Series([0.0, 0.1, 4.0, 1.0]), pd.Series([0.5, 0.6, 3.0, float("nan")]))
+    assert out.tolist() == [0.5, 0.2, 4.0, 3.0]

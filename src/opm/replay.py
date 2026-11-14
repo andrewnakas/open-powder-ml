@@ -52,6 +52,10 @@ def load(league: str, featured: bool = True, since: date | None = None) -> pd.Da
             if "raw_in" in o:
                 cols.append(o["raw_in"].rename("raw"))
             cols.append(o["snowfall_in"].rename("submitted"))
+            if "raw_in" in o and "p90" in o:
+                from .models.stack import _raw_p90
+
+                cols.append(_raw_p90(o).rename("q90"))
         for p in sorted((pb_checkout() / "data" / "submissions" / league / d.isoformat()).glob("baseline-*.csv")):
             try:
                 b = pd.read_csv(p).set_index(["station_id", "horizon_h"])["snowfall_in"]
@@ -65,7 +69,7 @@ def load(league: str, featured: bool = True, since: date | None = None) -> pd.Da
     if not frames:
         return pd.DataFrame(columns=[*KEY, "truth"])
     df = pd.concat(frames, ignore_index=True)
-    for c in ("climo", "raw", "submitted"):
+    for c in ("climo", "raw", "submitted", "q90"):
         if c not in df:
             df[c] = np.nan
     return df
@@ -83,7 +87,7 @@ def pooled(df: pd.DataFrame, col: str) -> dict:
 
 
 def sources(df: pd.DataFrame) -> list[str]:
-    return [c for c in df.columns if c not in (*KEY, "truth", "climo")]
+    return [c for c in df.columns if c not in (*KEY, "truth", "climo", "q90")]
 
 
 def versus(df: pd.DataFrame, ours: str = "raw") -> pd.DataFrame:
@@ -153,7 +157,7 @@ def current_chain(league: str, g: pd.DataFrame, known_before: date) -> np.ndarra
     if cfg:
         name = cfg["partner"].removeprefix("baseline-")
         if name in g:
-            b = g[name]
+            b = stack.capped(g[name], x, g["q90"]) if "q90" in g else g[name]
             x = x.where(b.isna(), (1 - cfg["w"]) * x + cfg["w"] * b)
     return x.clip(0, 200).to_numpy()
 

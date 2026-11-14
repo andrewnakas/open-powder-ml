@@ -82,6 +82,7 @@ def add_oof_ratio(df: pd.DataFrame) -> pd.DataFrame:
 
 SNOW_FEATS = ("cons_snow", "nsnow", "max_snow", "sd_snow")
 SNOW_MIN_COVER = 0.8
+SNOW_PROBE_MIN_ROWS = 20000
 
 
 def snow_ready(df: pd.DataFrame) -> bool:
@@ -175,6 +176,31 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
             "powder_score_snow_rows": round(float(np.mean(osk)), 2) if osk else None}
 
 
+def snow_probe(df: pd.DataFrame, feats: list[str], params: dict, folds: list) -> dict | None:
+    """While the snowfall harvest is partial: season CV on the covered rows
+    only, with and without the snowfall family, same rows both ways. Says what
+    the family is worth before it is allowed into the champion."""
+    if "nsnow" not in df:
+        return None
+    sub = df[df["nsnow"].fillna(0) > 0]
+    if len(sub) < SNOW_PROBE_MIN_ROWS:
+        return None
+    extra = [c for c in sub.columns if (c in SNOW_FEATS or c.startswith("snow__"))
+             and c not in feats and pd.api.types.is_numeric_dtype(sub[c]) and sub[c].notna().any()]
+    if not extra:
+        return None
+    folds = sorted(x for x in sub["season"].unique() if str(x) in {str(f) for f in folds})
+    base = cross_validate(sub, feats, params, folds)
+    with_snow = cross_validate(sub, [*feats, *extra], params, folds)
+    out = {"rows": int(len(sub)), "cover": round(float(len(sub) / len(df)), 3), "without": base["powder_score"],
+           "with": with_snow["powder_score"], "per_fold_without": base["per_fold"],
+           "per_fold_with": with_snow["per_fold"], "snow_consensus": base.get("snow_consensus")}
+    print(f"  snow probe on {out['rows']} covered rows ({out['cover']:.0%}): without {out['without']} "
+          f"{out['per_fold_without']}, with {out['with']} {out['per_fold_with']}, "
+          f"snowfall consensus {out['snow_consensus']}", flush=True)
+    return out
+
+
 def tune(df: pd.DataFrame, feats: list[str], champion: dict | None = None) -> tuple[dict, dict]:
     """Pick the settings with the best mean CV Powder Accuracy."""
     counts = df["season"].value_counts()
@@ -242,6 +268,9 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
     df = add_oof_ratio(df)
     feats = feature_list(df)
     params, cv = tune(df, feats, champion_params)
+    probe = None
+    if cv and not snow_ready(df):
+        probe = snow_probe(df, feats, params, cv["best"]["folds"])
     seasons = sorted(df["season"].unique())
     # Seasons with a real share of the rows. One that has barely started (a
     # few October rounds, mostly bare ground) must not set the round counts
@@ -296,6 +325,8 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
         metrics["cv_snow_consensus"] = cv["best"].get("snow_consensus")
         metrics["cv_powder_score_snow_rows"] = cv["best"].get("powder_score_snow_rows")
         metrics["cv"] = cv
+        if probe:
+            metrics["snow_probe"] = probe
         champ = next((r for r in cv["all"] if r.get("label") == "champion"), None)
         metrics["cv_champion_params"] = champ["powder_score"] if champ else None
     metrics["cons_slr_p99"] = {str(int(h)): float(g.quantile(0.99))

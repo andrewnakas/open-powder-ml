@@ -9,7 +9,10 @@ own resolved rounds this layer learns, per league:
 - a blend weight w (on a grid) for p50, minimising MAE on past rounds.
 
 It only switches on with enough history (MIN_ROUNDS) and a real gain
-(MIN_GAIN), and only where the partner covers the station. Quantiles are
+(MIN_GAIN), and only where the partner covers the station. The partner is
+capped at our own p90 (`capped`), in the fit and when applied: it may move us
+inside the range our model allows, not drag a confident dry forecast to a
+foot of snow (WPC, 2026-11-05, Colorado at 72 h: half of that cost a round). Quantiles are
 blended when the partner has them (WPC); otherwise ours are rescaled by the
 p50 change. P(>=6") blends the same way where the partner reports it.
 """
@@ -45,6 +48,21 @@ def _baselines(league: str, d: date) -> dict[str, pd.DataFrame]:
     return out
 
 
+def capped(base: pd.Series, p50: pd.Series, p90: pd.Series) -> pd.Series:
+    """The partner's value, no higher than our own p90 (or p50 if larger)."""
+    p90 = p90.reindex(base.index)
+    hi = np.maximum(p90, p50.reindex(base.index).fillna(0.0))  # no stored p90: no cap
+    return base.where(hi.isna(), np.minimum(base, hi))
+
+
+def _raw_p90(ours: pd.DataFrame) -> pd.Series:
+    """History stores p90 after post-processing; undo that round's overall
+    scaling so it sits next to `raw_in`."""
+    ok = ours["raw_in"] > 0.1
+    f = float((ours.loc[ok, "snowfall_in"] / ours.loc[ok, "raw_in"]).median()) if ok.sum() > 5 else 1.0
+    return ours["p90"] / (f if np.isfinite(f) and f > 0 else 1.0)
+
+
 def _featured(league: str) -> set[str]:
     st = stations(league)
     return set(st.index[st["featured"]])
@@ -70,9 +88,12 @@ def fit(league: str, before: date) -> dict | None:
         # the model's own output, before the online layer: that layer's early
         # version scaled five stations rounds by 4x, and a weight learned from
         # those rows would describe that bug, not the model
-        o = ours.set_index(["station_id", "horizon_h"])["raw_in"]
+        ours = ours.assign(q90=_raw_p90(ours) if "p90" in ours else np.nan).set_index(["station_id", "horizon_h"])
+        o = ours["raw_in"]
         for name, b in _baselines(league, d).items():
-            j = pd.concat([o.rename("ours"), b["snowfall_in"].rename("base"), t.rename("truth")], axis=1).dropna()
+            j = pd.concat([o.rename("ours"), b["snowfall_in"].rename("base"), t.rename("truth")],
+                          axis=1).dropna()
+            j["base"] = capped(j["base"], j["ours"], ours["q90"])
             if len(j):
                 rows.append(j.assign(partner=name, round=d))
     if not rows:
@@ -100,7 +121,10 @@ def apply(pred: pd.DataFrame, league: str, d: date) -> tuple[pd.DataFrame, dict 
         return pred, {**cfg, "applied": 0}
     w = cfg["w"]
     p = pred.set_index(["station_id", "horizon_h"]).copy()
-    b = base.reindex(p.index)
+    b = base.reindex(p.index).copy()
+    for c in ("snowfall_in", *QCOLS):
+        if c in b:
+            b[c] = capped(b[c], p["snowfall_in"], p["p90"])
     has = b["snowfall_in"].notna()
     new50 = (1 - w) * p["snowfall_in"] + w * b["snowfall_in"]
     if all(c in b for c in QCOLS):
