@@ -39,6 +39,11 @@ GRID = [
     {**PARAMS, "num_leaves": 127, "min_child_samples": 100, "feature_fraction": 0.6},
 ]
 CV_FOLDS = 3  # the most recent seasons, each held out in turn
+# Weight of a featured-station row in training (network rows count 1). The
+# headline board scores featured stations only; where the table is mostly
+# network rows this is worth points (ensemble entry: x4 = +1.56 CV), where it
+# is mostly featured rows it does nothing (x2, x4 = +0.0 here).
+FEATURED_WEIGHT = 1.0
 # Columns that exist in the table but stay out of the model until an
 # experiment (models/experiments.py) shows they help; matched by prefix.
 EXPERIMENTAL = ("cons_tmin", "q25_slr", "q75_slr", "cons_swe_d", "cons_twet_d", "sd_slr_d", "max_slr_d")
@@ -109,6 +114,12 @@ def feature_list(df: pd.DataFrame, extra: tuple[str, ...] = ()) -> list[str]:
     return [c for c in cols if df[c].notna().any()]
 
 
+def row_weight(df: pd.DataFrame):
+    if FEATURED_WEIGHT == 1.0 or "featured" not in df:
+        return None
+    return 1.0 + (FEATURED_WEIGHT - 1.0) * df["featured"].to_numpy(dtype=float)
+
+
 def _data(X, y, reference: lgb.Dataset | None = None, weight=None) -> lgb.Dataset:
     """A LightGBM dataset that keeps only its binned copy (the raw frame is
     freed once binned). One dataset serves every model with the same rows and
@@ -163,6 +174,7 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
     for s in folds:
         is_va = df["season"] == s
         need = [*feats, "truth_in", *([weight] if weight else []), *([REF] if resid and REF not in feats else [])]
+        w_tr = df.loc[~is_va, weight].to_numpy() if weight else row_weight(df[~is_va])
         tr, va = df.loc[~is_va, need], df[is_va]
         if "aug" in va:
             va = va[va["aug"] == 0]
@@ -172,7 +184,7 @@ def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list
             continue
         b_tr = tr[REF].fillna(0).to_numpy() if resid else 0.0
         b_va = va[REF].fillna(0).to_numpy() if resid else 0.0
-        ds = _data(tr[feats], tr["truth_in"] - b_tr, weight=tr[weight] if weight else None)
+        ds = _data(tr[feats], tr["truth_in"] - b_tr, weight=w_tr)
         del tr
         dv = _data(va[feats], va["truth_in"] - b_va, ds)
         pred = np.zeros(len(va))
@@ -318,12 +330,17 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
     n_train = int((~is_va).sum())
 
     rounds, models_va = {}, {}
-    ds = _data(df.loc[~is_va, feats], df.loc[~is_va, "truth_in"])
+    w = row_weight(df)
+
+    def wsel(m):
+        return None if w is None else w[m]
+
+    ds = _data(df.loc[~is_va, feats], df.loc[~is_va, "truth_in"], weight=wsel(~is_va))
     dv = _data(va[feats], va["truth_in"], ds)
     for a in QUANTILES:
         m, n = _train(ds, {"objective": "quantile", "alpha": a}, dv, params=params)
         rounds[str(a)], models_va[a] = n, m
-    ds = _data(df.loc[~is_va & is_24, feats], powder[~is_va & is_24])
+    ds = _data(df.loc[~is_va & is_24, feats], powder[~is_va & is_24], weight=wsel(~is_va & is_24))
     dv = _data(df.loc[is_va & is_24, feats], powder[is_va & is_24], ds)
     clf_va, n = _train(ds, {"objective": "binary"}, dv, params=params)
     rounds["clf"] = n
@@ -359,10 +376,10 @@ def fit(df: pd.DataFrame, holdout=None, champion_params: dict | None = None) -> 
                                for h, g in df.groupby("horizon_h")["cons_slr"]}
 
     del models_va, clf_va
-    ds = _data(df[feats], df["truth_in"])
+    ds = _data(df[feats], df["truth_in"], weight=w)
     final_q = {a: _train(ds, {"objective": "quantile", "alpha": a},
                          rounds=max(50, int(rounds[str(a)] * 1.1)), params=params)[0] for a in QUANTILES}
-    ds = _data(df.loc[is_24, feats], powder[is_24])
+    ds = _data(df.loc[is_24, feats], powder[is_24], weight=wsel(is_24))
     final_clf = _train(ds, {"objective": "binary"}, rounds=max(50, int(rounds["clf"] * 1.1)), params=params)[0]
     del ds
     return Bundle(features=feats, quantile_models=final_q, clf=final_clf, scale=scale,

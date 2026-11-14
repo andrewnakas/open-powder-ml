@@ -81,6 +81,9 @@ def _without(model: str):
 VARIANTS = {
     "w_feat2": _w_featured(2.0),
     "w_feat4": _w_featured(4.0),
+    "w_feat8": _w_featured(8.0),
+    "w_feat16": _w_featured(16.0),
+    "w_feat1": _w_featured(1.0),
     "w_recent": _w_recent,
     "resid": lambda df: {"resid": True},
     "seedbag": lambda df: {"seeds": 3},

@@ -75,3 +75,14 @@ def test_experimental_columns_stay_out_until_asked_for():
     df = _seasons().assign(q25_slr=1.0, cons_tmin=-3.0)
     assert "q25_slr" not in gbm.feature_list(df) and "cons_tmin" not in gbm.feature_list(df)
     assert "q25_slr" in gbm.feature_list(df, ("q25_slr",))
+
+
+def test_featured_weight_reaches_the_final_models(monkeypatch):
+    monkeypatch.setattr(gbm, "MAX_ROUNDS", 60)
+    df = _seasons()
+    assert gbm.row_weight(df) is None  # weight 1: no weights at all
+    monkeypatch.setattr(gbm, "FEATURED_WEIGHT", 4.0)
+    w = gbm.row_weight(df)
+    assert set(w) == {1.0, 4.0} and (w == 4.0).sum() == df["featured"].sum()
+    b = gbm.fit(df)
+    assert len(gbm.predict(b, df.drop(columns=["truth_in"]))) == len(df)
