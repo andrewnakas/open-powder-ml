@@ -82,6 +82,7 @@ def daily_snow(hourly: pd.DataFrame) -> pd.DataFrame:
 def _windows(d: pd.DataFrame) -> pd.DataFrame:
     """d has station_id, model, round_date, i (day index 0..2) + daily vars ->
     cumulative windows per horizon, only where every day is present."""
+    prev = d[d["i"] == -1]  # the day before the round, where the caller supplies it
     d = d[(d["i"] >= 0) & (d["i"] < 3)].sort_values("i")
     out = []
     keys = ["station_id", "model", "round_date"]
@@ -105,6 +106,9 @@ def _windows(d: pd.DataFrame) -> pd.DataFrame:
         if n < 3:  # the day just after the window: a storm forecast a day late is still a storm
             nxt = d[d["i"] == n].groupby(keys, sort=False)[["slr", "prcp"]].first()
             agg["slr_next"], agg["prcp_next"] = nxt["slr"], nxt["prcp"]
+        if len(prev):  # snow forecast for the day before can land in this one
+            pv = prev.groupby(keys, sort=False)[["slr", "prcp"]].first()
+            agg["slr_prev"], agg["prcp_prev"] = pv["slr"], pv["prcp"]
         agg = agg[agg["n"] == n].drop(columns="n").reset_index()
         agg["horizon_h"] = h
         out.append(agg)
@@ -135,11 +139,13 @@ def archive_windows(dly: pd.DataFrame) -> pd.DataFrame:
     d = dly[(dly["lead"] >= 1) & (dly["lead"] < STITCHED)].copy()
     if len(d):
         d["i"] = d["lead"] - 1
+        # the day before round D as the newest archived run saw it (lead 1)
+        d = pd.concat([d, d[d["lead"] == 1].assign(i=-1)], ignore_index=True)
         d["round_date"] = (pd.to_datetime(d["date"]) - pd.to_timedelta(d["i"], unit="D")).dt.date
         parts.append(_windows(d).assign(stitched=0))
     st = dly[dly["lead"] == STITCHED]
     if len(st):
-        rep = pd.concat([st.assign(i=i) for i in range(3)], ignore_index=True)
+        rep = pd.concat([st.assign(i=i) for i in range(-1, 3)], ignore_index=True)
         rep["round_date"] = (pd.to_datetime(rep["date"]) - pd.to_timedelta(rep["i"], unit="D")).dt.date
         parts.append(_windows(rep).assign(stitched=1))
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
@@ -186,7 +192,7 @@ def wide(win: pd.DataFrame) -> pd.DataFrame:
     p["stitched"] = win.groupby(keys)["stitched"].max() if "stitched" in win else 0
     summarize(p)
     # medians across models of values that have no per-model column
-    extra = ("slr_d", "prcp_d", "swe_d", "twet_d", "slr_next", "prcp_next")
+    extra = ("slr_d", "prcp_d", "swe_d", "twet_d", "slr_next", "prcp_next", "slr_prev", "prcp_prev")
     more = [c for c in win.columns if c == "tmin" or c.startswith(extra)]
     if more:
         g = win.groupby(keys)[more].median()
