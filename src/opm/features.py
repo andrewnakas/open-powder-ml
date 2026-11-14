@@ -186,7 +186,8 @@ def wide(win: pd.DataFrame) -> pd.DataFrame:
     p["stitched"] = win.groupby(keys)["stitched"].max() if "stitched" in win else 0
     summarize(p)
     # medians across models of values that have no per-model column
-    more = [c for c in win.columns if c == "tmin" or c.startswith(("slr_d", "prcp_d", "swe_d", "twet_d", "slr_next", "prcp_next"))]
+    extra = ("slr_d", "prcp_d", "swe_d", "twet_d", "slr_next", "prcp_next")
+    more = [c for c in win.columns if c == "tmin" or c.startswith(extra)]
     if more:
         g = win.groupby(keys)[more].median()
         for c in more:
