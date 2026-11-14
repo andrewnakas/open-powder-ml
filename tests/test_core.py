@@ -135,3 +135,17 @@ def test_plausibility_cap_kills_invented_storms():
     assert out.loc["la-hoya", "snowfall_in"] == pytest.approx(0.5)  # every model dry: no storm
     assert out.loc["la-hoya", "prob_6in"] <= 0.02
     assert out.loc["storm", "snowfall_in"] == 14.0  # a real storm is untouched
+
+
+def test_single_days_and_spread_exist_live_and_in_the_archive():
+    live = features.daily(pd.concat([_hourly(model=m, precip=p) for m, p in (("m1", 1.0), ("m2", 2.0), ("m3", 4.0))]))
+    arch = features.daily(pd.concat([_hourly(model=m, lead=k, precip=p, start="2026-01-08", days=8)
+                                     for k in (1, 2, 3) for m, p in (("m1", 1.0), ("m2", 2.0), ("m3", 4.0))]))
+    for win in (features.live_windows(live, date(2026, 1, 10)), features.archive_windows(arch)):
+        w = features.wide(win)
+        r = w[w["round_date"] == date(2026, 1, 10)].set_index("horizon_h")
+        assert np.isnan(r.loc[24, "cons_slr_d0"])  # a 24 h window is its own day 0
+        assert r.loc[72, "cons_slr_d0"] + r.loc[72, "cons_slr_d1"] + r.loc[72, "cons_slr_d2"] == pytest.approx(
+            r.loc[72, "cons_slr"], rel=0.01)
+        assert r.loc[48, "q25_slr"] < r.loc[48, "cons_slr"] < r.loc[48, "q75_slr"]
+        assert r.loc[24, "cons_tmin"] == pytest.approx(-5.0)

@@ -180,6 +180,36 @@ def train(
             store.push("models", [path, store.MODELS / f"{bundle}.json"])
 
 
+@app.command()
+def experiment(
+    bundle: str = typer.Option("nh", help="nh (stations+observers+alps), era5, resorts or resorts-na"),
+    variants: str = typer.Option("", help="Comma-separated names from models/experiments.py (empty: list them)"),
+):
+    """Season CV of the champion's settings against named variants, same folds
+    and rows. Reads the stores, writes no model."""
+    import pandas as pd
+
+    from . import NH_LEAGUES, store
+    from .dataset import training_table
+    from .models import experiments, gbm
+
+    names = [v.strip() for v in variants.split(",") if v.strip()]
+    if not names:
+        print("variants: " + ", ".join(experiments.VARIANTS))
+        return
+    store.pull("store", store.STORE)
+    store.pull("models", store.MODELS)
+    leagues = NH_LEAGUES if bundle == "nh" else (bundle,)
+    tables = [t for t in (training_table(lg) for lg in leagues) if len(t)]
+    if not tables:
+        _summary(f"experiment {bundle}: no training data yet")
+        return
+    df = pd.concat(tables, ignore_index=True)
+    path = store.MODELS / f"{bundle}.pkl"
+    old = gbm.Bundle.load(path) if path.exists() else None
+    _summary(experiments.run(df, names, getattr(old, "params", None) or gbm.PARAMS))
+
+
 def _better(new: dict, old: dict) -> bool:
     """Promotion gate.
 

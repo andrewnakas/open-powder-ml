@@ -97,6 +97,10 @@ def _windows(d: pd.DataFrame) -> pd.DataFrame:
         tw = (w["twet"] * w["prcp"].clip(lower=0.02)).groupby([w[k] for k in keys]).sum()
         ws = w["prcp"].clip(lower=0.02).groupby([w[k] for k in keys]).sum()
         agg["twet"] = tw / ws
+        # the single days inside a multi-day window (a 24 h window is its day 0)
+        for i in range(n if n > 1 else 0):
+            day = w[w["i"] == i].groupby(keys, sort=False)[["slr", "prcp"]].first()
+            agg[f"slr_d{i}"], agg[f"prcp_d{i}"] = day["slr"], day["prcp"]
         agg = agg[agg["n"] == n].drop(columns="n").reset_index()
         agg["horizon_h"] = h
         out.append(agg)
@@ -137,13 +141,9 @@ def archive_windows(dly: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
-def wide(win: pd.DataFrame) -> pd.DataFrame:
-    """One row per (station_id, round_date, horizon_h): per-model columns plus
-    cross-model summaries."""
-    keys = ["station_id", "round_date", "horizon_h"]
-    p = win.pivot_table(index=keys, columns="model", values=list(WIN_VARS), aggfunc="first")
-    p.columns = [f"{v}__{m}" for v, m in p.columns]
-    p["stitched"] = win.groupby(keys)["stitched"].max() if "stitched" in win else 0
+def summarize(p: pd.DataFrame) -> pd.DataFrame:
+    """Cross-model summaries from the per-model columns, in place. Also used
+    to rebuild them after a model's columns are blanked."""
     slr_cols = [c for c in p.columns if c.startswith("slr__")]
     snow_cols = [c for c in p.columns if c.startswith("snow__")]
     prcp_cols = [c for c in p.columns if c.startswith("prcp__")]
@@ -167,6 +167,26 @@ def wide(win: pd.DataFrame) -> pd.DataFrame:
     p["cons_twet"] = p[tw_cols].median(axis=1)
     p["nmod"] = p[slr_cols].notna().sum(axis=1)
     p["frac_snowy"] = (p[slr_cols] >= 1.0).sum(axis=1) / p["nmod"].clip(lower=1)
+    q = p[slr_cols].quantile([0.25, 0.75], axis=1) if slr_cols else None
+    p["q25_slr"] = q.loc[0.25] if q is not None else np.nan
+    p["q75_slr"] = q.loc[0.75] if q is not None else np.nan
+    return p
+
+
+def wide(win: pd.DataFrame) -> pd.DataFrame:
+    """One row per (station_id, round_date, horizon_h): per-model columns plus
+    cross-model summaries."""
+    keys = ["station_id", "round_date", "horizon_h"]
+    p = win.pivot_table(index=keys, columns="model", values=list(WIN_VARS), aggfunc="first")
+    p.columns = [f"{v}__{m}" for v, m in p.columns]
+    p["stitched"] = win.groupby(keys)["stitched"].max() if "stitched" in win else 0
+    summarize(p)
+    # medians across models of values that have no per-model column
+    more = [c for c in win.columns if c == "tmin" or c.startswith(("slr_d", "prcp_d"))]
+    if more:
+        g = win.groupby(keys)[more].median()
+        for c in more:
+            p[f"cons_{c}"] = g[c]
     return p.reset_index()
 
 

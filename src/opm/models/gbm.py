@@ -39,6 +39,9 @@ GRID = [
     {**PARAMS, "num_leaves": 127, "min_child_samples": 100, "feature_fraction": 0.6},
 ]
 CV_FOLDS = 3  # the most recent seasons, each held out in turn
+# Columns that exist in the table but stay out of the model until an
+# experiment (models/experiments.py) shows they help; matched by prefix.
+EXPERIMENTAL = ("cons_slr_d", "cons_prcp_d", "cons_tmin", "q25_slr", "q75_slr")
 
 
 @dataclass
@@ -96,18 +99,21 @@ def snow_ready(df: pd.DataFrame) -> bool:
     return bool(det.any()) and float((df.loc[det, "nsnow"].fillna(0) > 0).mean()) >= SNOW_MIN_COVER
 
 
-def feature_list(df: pd.DataFrame) -> list[str]:
-    cols = [c for c in df.columns if c not in NON_FEATURES and pd.api.types.is_numeric_dtype(df[c])]
+def feature_list(df: pd.DataFrame, extra: tuple[str, ...] = ()) -> list[str]:
+    """`extra`: EXPERIMENTAL prefixes to let in."""
+    cols = [c for c in df.columns if c not in NON_FEATURES and not c.startswith("_")
+            and pd.api.types.is_numeric_dtype(df[c])
+            and (not c.startswith(EXPERIMENTAL) or c.startswith(tuple(extra)))]
     if not snow_ready(df):
         cols = [c for c in cols if c not in SNOW_FEATS and not c.startswith("snow__")]
     return [c for c in cols if df[c].notna().any()]
 
 
-def _data(X, y, reference: lgb.Dataset | None = None) -> lgb.Dataset:
+def _data(X, y, reference: lgb.Dataset | None = None, weight=None) -> lgb.Dataset:
     """A LightGBM dataset that keeps only its binned copy (the raw frame is
     freed once binned). One dataset serves every model with the same rows and
     label, e.g. the five quantile levels."""
-    return lgb.Dataset(X, y, reference=reference)
+    return lgb.Dataset(X, y, reference=reference, weight=weight)
 
 
 def _train(ds: lgb.Dataset, obj: dict, dv: lgb.Dataset | None = None, rounds: int | None = None,
@@ -136,25 +142,49 @@ def _ps(pred: np.ndarray, d: pd.DataFrame) -> float | None:
     return powder_score(float(np.abs(pred[m] - y).mean()), float(np.abs(d["climo_p50"].to_numpy()[m] - y).mean()))
 
 
-def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list) -> dict:
+def cv_folds(df: pd.DataFrame) -> list:
+    """The most recent seasons with a real share of the data (a season that
+    has barely started would make a noisy fold); empty with under 3 of them."""
+    counts = df["season"].value_counts()
+    seasons = sorted(s for s, n in counts.items() if n >= 0.05 * len(df))
+    return seasons[-CV_FOLDS:] if len(seasons) >= 3 else []
+
+
+def cross_validate(df: pd.DataFrame, feats: list[str], params: dict, folds: list, weight: str | None = None,
+                   resid: bool = False, seeds: int = 1, oof: list | None = None) -> dict:
     """Season-wise CV of the median model (the MAE-optimal point forecast that
-    Powder Accuracy judges): each fold season is held out, the rest train."""
+    Powder Accuracy judges): each fold season is held out, the rest train.
+
+    For experiments: `weight` names a sample-weight column, `resid` trains on
+    truth minus the raw consensus (added back to the prediction), `seeds`
+    averages that many models, and `oof` collects the scored rows with their
+    predictions."""
     scores, raw, snow, ours_snow = [], [], [], []
     for s in folds:
         is_va = df["season"] == s
-        tr, va = df.loc[~is_va, [*feats, "truth_in"]], df[is_va]
+        need = [*feats, "truth_in", *([weight] if weight else []), *([REF] if resid and REF not in feats else [])]
+        tr, va = df.loc[~is_va, need], df[is_va]
         if "aug" in va:
             va = va[va["aug"] == 0]
         if "featured" in va and va["featured"].any():  # score like the headline board
             va = va[va["featured"] == 1]
         if tr.empty or va.empty:
             continue
-        ds = _data(tr[feats], tr["truth_in"])
+        b_tr = tr[REF].fillna(0).to_numpy() if resid else 0.0
+        b_va = va[REF].fillna(0).to_numpy() if resid else 0.0
+        ds = _data(tr[feats], tr["truth_in"] - b_tr, weight=tr[weight] if weight else None)
         del tr
-        m, _ = _train(ds, {"objective": "quantile", "alpha": 0.5}, _data(va[feats], va["truth_in"], ds),
-                      params=params)
-        del ds
-        pred = np.clip(m.predict(va[feats], num_iteration=m.best_iteration or None), 0, None)
+        dv = _data(va[feats], va["truth_in"] - b_va, ds)
+        pred = np.zeros(len(va))
+        for k in range(seeds):
+            m, _ = _train(ds, {"objective": "quantile", "alpha": 0.5, **({"seed": k} if k else {})}, dv,
+                          params=params)
+            pred += m.predict(va[feats], num_iteration=m.best_iteration or None) / seeds
+        del ds, dv
+        pred = np.clip(pred + b_va, 0, None)
+        if oof is not None:
+            keep = [c for c in (*KEYS, "league", "truth_in", "climo_p50") if c in va]
+            oof.append(va[keep].assign(pred=pred, fold=str(s)))
         scores.append(_ps(pred, va))
         vr = va.dropna(subset=[REF]) if REF in va else va.iloc[:0]
         raw.append(_ps(vr[REF].to_numpy(), vr) if len(vr) else None)
@@ -203,13 +233,9 @@ def snow_probe(df: pd.DataFrame, feats: list[str], params: dict, folds: list) ->
 
 def tune(df: pd.DataFrame, feats: list[str], champion: dict | None = None) -> tuple[dict, dict]:
     """Pick the settings with the best mean CV Powder Accuracy."""
-    counts = df["season"].value_counts()
-    # folds: the most recent seasons with a real share of the data (a season
-    # that has barely started would make a noisy fold)
-    seasons = sorted(s for s, n in counts.items() if n >= 0.05 * len(df))
-    if len(seasons) < 3:
+    folds = cv_folds(df)
+    if not folds:
         return PARAMS, {}
-    folds = seasons[-CV_FOLDS:]
     cands = list(GRID) + ([champion] if champion and champion not in GRID else [])
     results = []
     for i, p in enumerate(cands):
