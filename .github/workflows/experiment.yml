@@ -1,0 +1,33 @@
+# Season CV of named model variants against the current settings (see
+# src/opm/models/experiments.py). Manual only; reads the stores, writes nothing.
+name: Experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      variants:
+        description: "Comma-separated variant names"
+        required: true
+      bundle:
+        description: "Bundle"
+        default: nh
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Experiment ${{ inputs.bundle }} ${{ inputs.variants }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VARIANTS: ${{ inputs.variants }}
+          BUNDLE: ${{ inputs.bundle }}
+        run: opm experiment --bundle "$BUNDLE" --variants "$VARIANTS"
