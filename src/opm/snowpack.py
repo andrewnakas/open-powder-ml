@@ -10,7 +10,8 @@ fetcher), so they are fair game as long as they predate the cutoff.
 Timing: AWDB daily values are end-of-day readings (periodRef END). For round
 D (cutoff 00Z D, the afternoon of D-1 in North America) the newest reading
 taken before the cutoff is the end of local day D-2 (midnight starting D-1).
-Features use only readings dated <= D-2.
+Features use only readings dated <= D-2 (D-3 on a pass that runs before the
+D-2 reading exists).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import pandas as pd
 
 LEAGUES = ("stations",)
 LAG_DAYS = 2  # newest usable daily reading: D-2
+STALE_OK = True  # fall back one day when the D-2 reading is not out yet
 ELEMENTS = ("SNWD", "WTEQ", "TAVG")
 COLS = ("sp_depth", "sp_swe", "sp_density", "sp_new1", "sp_new3", "sp_depth_chg3", "sp_tavg", "sp_bare")
 AWDB_SUFFIXES = (":SNTL", ":SNTLT", ":MSNT")  # networks AWDB serves (not CDEC)
@@ -95,8 +97,17 @@ def features(keys: pd.DataFrame, obs: pd.DataFrame | None = None) -> pd.DataFram
         o[c] = pd.to_numeric(o[c], errors="coerce")
     o.loc[(o["SNWD"] < 0) | (o["SNWD"] > 400), "SNWD"] = np.nan
 
+    # An early pass runs before the D-2 end-of-day reading is published (it
+    # appears around 08Z on D-1). Training always has that reading, so a
+    # forecast without it is one the model never saw; yesterday's pack is the
+    # closer stand-in. Only round dates with no D-2 reading at all are shifted.
+    newest = o.index.get_level_values("date").max()
+    late = ((rd - pd.Timedelta(days=LAG_DAYS)) > newest).to_numpy().astype(int) if STALE_OK else 0
+    if np.any(late):
+        print(f"snowpack: no reading yet for {int(np.sum(late))} keys; using the day before", flush=True)
+
     def at(lag: int, col: str) -> np.ndarray:
-        idx = pd.MultiIndex.from_arrays([k["station_id"], rd - pd.Timedelta(days=LAG_DAYS + lag)])
+        idx = pd.MultiIndex.from_arrays([k["station_id"], rd - pd.to_timedelta(LAG_DAYS + lag + late, unit="D")])
         return o[col].reindex(idx).to_numpy()
 
     d0, d1, d3 = at(0, "SNWD"), at(1, "SNWD"), at(3, "SNWD")

@@ -76,3 +76,19 @@ def test_stack_partner_is_capped_at_our_p90():
     base = pd.Series([11.0, 0.2, 5.0, 3.0])
     out = capped(base, pd.Series([0.0, 0.1, 4.0, 1.0]), pd.Series([0.5, 0.6, 3.0, float("nan")]))
     assert out.tolist() == [0.5, 0.2, 4.0, 3.0]
+
+
+def test_snowpack_falls_back_a_day_when_the_reading_is_not_out():
+    from datetime import date
+
+    import pandas as pd
+
+    from opm import snowpack
+
+    obs = pd.DataFrame({"station_id": "1:CO:SNTL", "date": pd.date_range("2026-11-06", "2026-11-12"),
+                        "SNWD": [10, 10, 12, 12, 15, 15, 20], "WTEQ": 3.0, "TAVG": 25.0})
+    keys = pd.DataFrame({"station_id": ["1:CO:SNTL"] * 2, "round_date": [date(2026, 11, 14), date(2026, 11, 15)]})
+    f = snowpack.features(keys, obs).set_index("round_date")
+    assert f.loc[date(2026, 11, 14), "sp_depth"] == 20  # D-2 = 11-12 exists
+    assert f.loc[date(2026, 11, 15), "sp_depth"] == 20  # D-2 = 11-13 not out: 11-12 stands in
+    assert f.loc[date(2026, 11, 15), "sp_new1"] == 5
