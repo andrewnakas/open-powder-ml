@@ -78,38 +78,8 @@ def _without(model: str):
     return f
 
 
-GFSX_KEEP = ("gfsx_first12", "gfsx_last12", "gfsx_pre12", "gfsx_post6", "gfsx_peak6", "gfsx_hours")
-
-
-def _gfsx(df):
-    """Hourly-GFS timing features from deep-powder's public `nbhd` release
-    (src/dpow/nbhd.py there; +1.5 CV in deep-powder). Rows deep-powder never
-    harvested stay NaN; an adopted version would harvest opm's own rounds."""
-    import subprocess
-    import tempfile
-    from pathlib import Path
-
-    dest = Path(tempfile.mkdtemp())
-    subprocess.run(["gh", "release", "download", "nbhd", "-R", "andrewnakas/deep-powder",
-                    "-p", "gfsx2__*.parquet", "-D", str(dest)], check=True)
-    parts = []
-    for f in sorted(dest.glob("gfsx2__*.parquet")):
-        g = pd.read_parquet(f, columns=["station_id", "round_date", "horizon_h", *GFSX_KEEP])
-        g["league"] = f.stem.split("__")[1]
-        parts.append(g)
-    g = pd.concat(parts, ignore_index=True)
-    g["round_date"] = pd.to_datetime(g["round_date"]).dt.date
-    g = g.drop_duplicates(["league", "station_id", "round_date", "horizon_h"], keep="last")
-    key = pd.to_datetime(df["round_date"]).dt.date
-    d = df.assign(round_date=key).merge(g, on=["league", "station_id", "round_date", "horizon_h"], how="left")
-    for c in GFSX_KEEP:
-        d[c] = d[c].astype("float32")
-    print(f"  gfsx: {d['gfsx_first12'].notna().mean():.0%} of rows have the features", flush=True)
-    return {"df": d}
-
-
 VARIANTS = {
-    "gfsx": _gfsx,
+    # "gfsx" (hourly-GFS timing, +1.55 CV) adopted 2026-11-17: now in every table (gfsx.py)
     "w_feat2": _w_featured(2.0),
     "w_feat4": _w_featured(4.0),
     "w_feat8": _w_featured(8.0),

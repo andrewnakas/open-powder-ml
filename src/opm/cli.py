@@ -154,6 +154,10 @@ def train(
         _summary(f"train {bundle}: no training data yet")
         return
     df = pd.concat(tables, ignore_index=True)
+    if bundle == "nh":  # hourly-GFS timing features (gfsx.py), harvested by deep-powder
+        from . import gfsx
+
+        df = gfsx.join(df)
     if bundle == "nh":  # never silently train without the snowpack state again
         st = df[df["league"] == "stations"]
         cov = st["sp_depth"].notna().mean() if "sp_depth" in st and len(st) else 0.0
@@ -205,6 +209,10 @@ def experiment(
         _summary(f"experiment {bundle}: no training data yet")
         return
     df = pd.concat(tables, ignore_index=True)
+    if bundle == "nh":  # hourly-GFS timing features (gfsx.py), harvested by deep-powder
+        from . import gfsx
+
+        df = gfsx.join(df)
     path = store.MODELS / f"{bundle}.pkl"
     old = gbm.Bundle.load(path) if path.exists() else None
     _summary(experiments.run(df, names, getattr(old, "params", None) or gbm.PARAMS))

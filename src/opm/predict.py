@@ -65,7 +65,7 @@ def _daily(r: Round, st: pd.DataFrame, models: tuple[str, ...] | None, ledger) -
 
 
 def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | None,
-           keep: list | None = None) -> pd.DataFrame:
+           keep: list | None = None, gx: pd.DataFrame | None = None) -> pd.DataFrame:
     """Tier 0 from every model fetched; tier 1 from only the models the
     bundle was trained on (so cross-model summaries mean the same thing).
     as_league: the league whose truth flavour the bundle should predict."""
@@ -81,6 +81,9 @@ def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | Non
     if Xg.empty:
         return _with_density(t0, X)
     Xg["league_code"] = NH_LEAGUES.index(as_league) if as_league in NH_LEAGUES else len(NH_LEAGUES)
+    if gx is not None and len(gx):
+        Xg = Xg.drop(columns=[c for c in gx.columns if c.startswith("gfsx_") and c in Xg])
+        Xg = Xg.merge(gx, on=["station_id", "horizon_h"], how="left")
     if keep is not None:
         keep.append(Xg)
     t1 = gbm.predict(bundle, Xg)
@@ -154,6 +157,22 @@ FEATURED_MINUTES = 15  # time box for the featured fetch (they decide the rankin
 NETWORK_MINUTES = 10  # time box for the rest of the network
 
 
+def _gfsx(r: Round, st: pd.DataFrame, bundle: gbm.Bundle | None, info: dict) -> pd.DataFrame | None:
+    """Hourly-GFS timing features for this round (gfsx.py), only when the
+    bundle uses them. A failure costs the columns (NaN), never the round."""
+    if bundle is None or not any(f.startswith("gfsx_") for f in bundle.features) or st.empty:
+        return None
+    from . import gfsx
+
+    try:
+        gx = gfsx.for_round(r.cutoff, st, r.round_date)
+        info["gfsx_rows"] = len(gx)
+        return gx
+    except Exception as e:
+        info["gfsx_error"] = f"{type(e).__name__}: {e}"[:200]
+        return None
+
+
 def build(r: Round, network: bool = True, budget: float | None = None) -> Result:
     import time
 
@@ -168,14 +187,15 @@ def build(r: Round, network: bool = True, budget: float | None = None) -> Result
 
     proxy = r.league if bname == r.league else PROXY_LEAGUE.get(r.league, r.league)
     seen: list = []
-    parts = [_model(_daily(r, reg.loc[feat_ids], None, ledger), r, proxy, bundle, keep=seen)]
+    gx = _gfsx(r, reg.loc[ids], bundle, info)
+    parts = [_model(_daily(r, reg.loc[feat_ids], None, ledger), r, proxy, bundle, keep=seen, gx=gx)]
 
     carried = _carry_over(r.league, r.round_date, set(net_ids)) if network else pd.DataFrame()
     todo = sorted(set(net_ids) - set(carried.get("station_id", [])))
     if network and todo:
         ledger.deadline = time.time() + NETWORK_MINUTES * 60
         try:
-            parts.append(_model(_daily(r, reg.loc[todo], NETWORK_MODELS, ledger), r, proxy, bundle))
+            parts.append(_model(_daily(r, reg.loc[todo], NETWORK_MODELS, ledger), r, proxy, bundle, gx=gx))
             info["quota_note"] = ledger.note
         except om.QuotaExhausted as e:  # featured rows are what matter: ship without the rest
             info["quota_note"] = f"network rows skipped: {e}"
