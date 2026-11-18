@@ -82,7 +82,7 @@ def _model(dly: pd.DataFrame, r: Round, as_league: str, bundle: gbm.Bundle | Non
         return _with_density(t0, X)
     Xg["league_code"] = NH_LEAGUES.index(as_league) if as_league in NH_LEAGUES else len(NH_LEAGUES)
     if gx is not None and len(gx):
-        Xg = Xg.drop(columns=[c for c in gx.columns if c.startswith("gfsx_") and c in Xg])
+        Xg = Xg.drop(columns=[c for c in gx.columns if c.startswith(("gfsx_", "wndx_")) and c in Xg])
         Xg = Xg.merge(gx, on=["station_id", "horizon_h"], how="left")
     if keep is not None:
         keep.append(Xg)
@@ -158,19 +158,26 @@ NETWORK_MINUTES = 10  # time box for the rest of the network
 
 
 def _gfsx(r: Round, st: pd.DataFrame, bundle: gbm.Bundle | None, info: dict) -> pd.DataFrame | None:
-    """Hourly-GFS timing features for this round (gfsx.py), only when the
-    bundle uses them. A failure costs the columns (NaN), never the round."""
-    if bundle is None or not any(f.startswith("gfsx_") for f in bundle.features) or st.empty:
+    """Hourly-GFS features for this round: timing (gfsx.py) and storm wind + moisture
+    (wndx.py), each only when the bundle uses it. A failure costs the columns (NaN),
+    never the round."""
+    if bundle is None or st.empty:
         return None
-    from . import gfsx
+    from . import gfsx, wndx
 
-    try:
-        gx = gfsx.for_round(r.cutoff, st, r.round_date)
-        info["gfsx_rows"] = len(gx)
-        return gx
-    except Exception as e:
-        info["gfsx_error"] = f"{type(e).__name__}: {e}"[:200]
-        return None
+    out = None
+    for name, mod, args in (("gfsx", gfsx, (r.cutoff, st, r.round_date)),
+                            ("wndx", wndx, (r.cutoff, st, r.round_date))):
+        if not any(f.startswith(f"{name}_") for f in bundle.features):
+            continue
+        try:
+            g = mod.for_round(*args)
+            info[f"{name}_rows"] = len(g)
+            if len(g):
+                out = g if out is None else out.merge(g, on=["station_id", "horizon_h"], how="outer")
+        except Exception as e:
+            info[f"{name}_error"] = f"{type(e).__name__}: {e}"[:200]
+    return out
 
 
 def build(r: Round, network: bool = True, budget: float | None = None) -> Result:
