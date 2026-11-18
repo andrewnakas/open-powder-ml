@@ -35,6 +35,8 @@ import pandas as pd
 from . import HORIZONS
 
 COLS = ("gfsx_first12", "gfsx_last12", "gfsx_pre12", "gfsx_post6", "gfsx_peak6", "gfsx_hours")
+# finer and wider edges (deep-powder: +0.72 CV with every fold up, 2026-11-18); experimental here until measured
+EDGES = ("gfsx_pre6", "gfsx_pre24", "gfsx_post12", "gfsx_first6", "gfsx_last6", "gfsx_last24")
 LEAGUES = ("stations", "observers", "alps")  # what deep-powder harvests for training
 SOURCE_REPO = "andrewnakas/deep-powder"
 ICECHUNK = ("dynamical-noaa-gfs", "noaa-gfs-forecast/v0.2.7.icechunk")
@@ -131,6 +133,12 @@ def features(init: pd.Timestamp, st: pd.DataFrame, round_date: date) -> pd.DataF
             "gfsx_post6": (s * ((r >= h) & (r < h + 6))).sum(1),
             "gfsx_peak6": six.max(1),
             "gfsx_hours": ((s > 0.01) & w).sum(1),
+            "gfsx_pre6": (s * ((r >= -6) & (r < 0))).sum(1),
+            "gfsx_pre24": (s * ((r >= -24) & (r < 0))).sum(1),
+            "gfsx_post12": (s * ((r >= h) & (r < h + 12))).sum(1),
+            "gfsx_first6": (s * (w & (r < 6))).sum(1),
+            "gfsx_last6": (s * (w & (r >= h - 6))).sum(1),
+            "gfsx_last24": (s * (w & (r >= h - 24))).sum(1),
         }, index=st.index).astype("float32")
         f[~full] = np.nan
         f["horizon_h"] = h
@@ -156,7 +164,7 @@ def join(df: pd.DataFrame) -> pd.DataFrame:
     import tempfile
     from pathlib import Path
 
-    df = df.drop(columns=[c for c in COLS if c in df])
+    df = df.drop(columns=[c for c in (*COLS, *EDGES) if c in df])
     dest = Path(tempfile.mkdtemp())
     try:
         subprocess.run(["gh", "release", "download", "nbhd", "-R", SOURCE_REPO, "-p", "gfsx2__*.parquet",
@@ -166,7 +174,7 @@ def join(df: pd.DataFrame) -> pd.DataFrame:
         return df
     parts = []
     for f in sorted(dest.glob("gfsx2__*.parquet")):
-        g = pd.read_parquet(f, columns=["station_id", "round_date", "horizon_h", *COLS])
+        g = pd.read_parquet(f, columns=["station_id", "round_date", "horizon_h", *COLS, *EDGES])
         g["league"] = f.stem.split("__")[1]
         parts.append(g)
     if not parts:
@@ -177,7 +185,7 @@ def join(df: pd.DataFrame) -> pd.DataFrame:
     key = pd.to_datetime(df["round_date"]).dt.date
     out = df.assign(_rd=key).merge(g.rename(columns={"round_date": "_rd"}),
                                    on=["league", "station_id", "_rd", "horizon_h"], how="left").drop(columns="_rd")
-    for c in COLS:
+    for c in (*COLS, *EDGES):
         out[c] = out[c].astype("float32")
     print(f"  gfsx: {out['gfsx_first12'].notna().mean():.0%} of rows have the timing features", flush=True)
     return out
