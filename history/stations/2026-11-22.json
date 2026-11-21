@@ -4,11 +4,11 @@
  "final": false,
  "merged": false,
  "pr": "https://github.com/andrewnakas/powderbench/pull/888",
- "submissions": 1,
- "submitted_utc": "2026-11-21T07:58:55+00:00",
+ "submissions": 2,
+ "submitted_utc": "2026-11-21T08:41:48+00:00",
  "tiers": {
-  "t1": 2680,
-  "t1x": 5
+  "t1": 2981,
+  "t1x": 7
  },
  "updates": 0
 }
