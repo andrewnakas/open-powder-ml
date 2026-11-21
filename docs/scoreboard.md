@@ -1,6 +1,6 @@
-_Updated 2026-11-20 02:36 UTC from PowderBench leaderboards._
+_Updated 2026-11-21 02:50 UTC from PowderBench leaderboards._
 
-### alps — **#13** of 15 (Powder Accuracy -26.5, 14 rounds)
+### alps — **#13** of 15 (Powder Accuracy -23.4, 15 rounds)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
@@ -10,7 +10,7 @@ _Updated 2026-11-20 02:36 UTC from PowderBench leaderboards._
 | 4 | baseline-icon | 4.5 | 0.33 | – | – | 7 |
 | 5 | house-blend | 1.1 | 0.34 | 0.153 | 0.000 | 7 |
 | 6 | baseline-arome | 0.6 | 0.37 | – | – | 7 |
-| 13 | **open-powder-ml** | -26.5 | 0.50 | 0.182 | 0.009 | 14 |
+| 13 | **open-powder-ml** | -23.4 | 0.52 | 0.188 | 0.008 | 15 |
 
 ### era5 — **#1** of 17 (Powder Accuracy 29.9, 7 rounds)
 
@@ -23,17 +23,17 @@ _Updated 2026-11-20 02:36 UTC from PowderBench leaderboards._
 | 5 | baseline-ecmwf | 0.6 | 0.13 | – | – | 9 |
 | 6 | baseline-climatology | 0.0 | 0.92 | 0.362 | 0.029 | 114 |
 
-### observers — **#14** of 17 (Powder Accuracy -75.8, 21 rounds)
+### observers — **#14** of 17 (Powder Accuracy -69.9, 22 rounds)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
-| 1 | open-powder-ensemble | 29.1 | 0.15 | 0.062 | 0.003 | 18 |
-| 2 | baseline-consensus | 23.2 | 0.15 | – | – | 23 |
-| 3 | baseline-icon | 17.5 | 0.18 | – | – | 23 |
-| 4 | baseline-ukmo | 16.3 | 0.15 | – | – | 23 |
-| 5 | baseline-zeros | 15.8 | 0.19 | 0.095 | 0.003 | 23 |
-| 6 | house-blend | 8.7 | 0.18 | 0.083 | 0.003 | 20 |
-| 14 | **open-powder-ml** | -75.8 | 0.34 | 0.116 | 0.003 | 21 |
+| 1 | open-powder-ensemble | 31.6 | 0.15 | 0.062 | 0.003 | 19 |
+| 2 | baseline-consensus | 25.8 | 0.15 | – | – | 24 |
+| 3 | baseline-icon | 20.4 | 0.18 | – | – | 24 |
+| 4 | baseline-ukmo | 19.3 | 0.14 | – | – | 24 |
+| 5 | baseline-zeros | 18.7 | 0.19 | 0.093 | 0.002 | 24 |
+| 6 | house-blend | 11.4 | 0.18 | 0.085 | 0.003 | 21 |
+| 14 | **open-powder-ml** | -69.9 | 0.34 | 0.116 | 0.003 | 22 |
 
 ### resorts — **#14** of 17 (Powder Accuracy -3847.7, 7 rounds)
 
@@ -47,26 +47,26 @@ _Updated 2026-11-20 02:36 UTC from PowderBench leaderboards._
 | 6 | baseline-persistence | -113.5 | 4.00 | – | – | 111 |
 | 14 | **open-powder-ml** | -3847.7 | 1.49 | 0.523 | 0.080 | 7 |
 
-### resorts-na — **#15** of 17 (Powder Accuracy -41.3, 15 rounds)
+### resorts-na — **#15** of 17 (Powder Accuracy -37.1, 16 rounds)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
 | 1 | baseline-ecmwf | 29.4 | 0.97 | – | – | 8 |
-| 2 | baseline-icon | 20.9 | 1.20 | – | – | 12 |
-| 3 | baseline-zeros | 18.4 | 1.36 | 0.682 | 0.043 | 13 |
-| 4 | baseline-aifs | 18.2 | 1.19 | – | – | 12 |
-| 5 | baseline-wpc | 15.8 | 1.20 | 0.544 | 0.034 | 12 |
-| 6 | baseline-consensus | 12.8 | 1.22 | – | – | 12 |
-| 15 | **open-powder-ml** | -41.3 | 1.51 | 0.619 | 0.036 | 15 |
+| 2 | baseline-icon | 21.0 | 1.36 | – | – | 13 |
+| 3 | baseline-aifs | 17.8 | 1.37 | – | – | 13 |
+| 4 | baseline-zeros | 17.4 | 1.55 | 0.774 | 0.051 | 14 |
+| 5 | baseline-wpc | 16.8 | 1.35 | 0.610 | 0.040 | 13 |
+| 6 | baseline-consensus | 13.7 | 1.37 | – | – | 13 |
+| 15 | **open-powder-ml** | -37.1 | 1.61 | 0.669 | 0.041 | 16 |
 
-### stations — **#14** of 18 (Powder Accuracy 10.1, 24 rounds)
+### stations — **#13** of 19 (Powder Accuracy 12.1, 25 rounds)
 
 | # | team | Powder Accuracy | MAE | pinball | Brier₆ | rounds |
 |---|---|---|---|---|---|---|
-| 1 | house-gbm | 48.4 | 0.83 | 0.328 | 0.017 | 11 |
-| 2 | house-analog | 45.6 | 0.96 | 0.356 | 0.020 | 11 |
-| 3 | baseline-consensus | 38.8 | 0.80 | – | – | 26 |
-| 4 | house-blend | 36.9 | 0.79 | 0.358 | 0.023 | 24 |
-| 5 | baseline-wpc | 36.0 | 0.73 | 0.293 | 0.013 | 21 |
+| 1 | house-gbm | 49.2 | 0.95 | 0.377 | 0.022 | 12 |
+| 2 | house-analog | 45.6 | 1.12 | 0.415 | 0.025 | 12 |
+| 3 | baseline-consensus | 39.2 | 0.87 | – | – | 27 |
+| 4 | house-blend | 38.0 | 0.83 | 0.378 | 0.025 | 25 |
+| 5 | baseline-wpc | 37.3 | 0.78 | 0.310 | 0.015 | 22 |
 | 6 | baseline-ecmwf | 33.4 | 0.91 | – | – | 15 |
-| 14 | **open-powder-ml** | 10.1 | 1.23 | 0.429 | 0.020 | 24 |
+| 13 | **open-powder-ml** | 12.1 | 1.26 | 0.446 | 0.021 | 25 |
